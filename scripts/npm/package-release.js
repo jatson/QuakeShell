@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+const { listPackage } = require('@electron/asar');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -88,6 +89,128 @@ function assertPackagedExecutableVersion(packagedDirectory, metadata, runner = s
   }
 
   return executablePath;
+}
+
+function findFirstMatchingFile(rootDirectory, matcher) {
+  if (!fs.existsSync(rootDirectory)) {
+    return null;
+  }
+
+  const pendingDirectories = [rootDirectory];
+  const visitedDirectories = new Set();
+  while (pendingDirectories.length > 0) {
+    const currentDirectory = pendingDirectories.pop();
+    let realPath;
+    try {
+      realPath = (fs.realpathSync.native || fs.realpathSync)(currentDirectory);
+    } catch {
+      continue;
+    }
+
+    if (visitedDirectories.has(realPath)) {
+      continue;
+    }
+
+    visitedDirectories.add(realPath);
+
+    let entries;
+    try {
+      entries = fs.readdirSync(currentDirectory, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const entryPath = path.join(currentDirectory, entry.name);
+      if (entry.isDirectory()) {
+        pendingDirectories.push(entryPath);
+        continue;
+      }
+
+      let isMatch = false;
+      try {
+        isMatch = entry.isFile() && matcher(entryPath, entry.name);
+      } catch {
+        continue;
+      }
+
+      if (isMatch) {
+        return entryPath;
+      }
+    }
+  }
+
+  return null;
+}
+
+function normalizePathForComparison(filePath) {
+  return String(filePath || '').replace(/\\/g, '/');
+}
+
+function stripLeadingSlash(filePath) {
+  return normalizePathForComparison(filePath).replace(/^\/+/, '');
+}
+
+function assertPackagedNodePtyPayload(packagedDirectory, options = {}) {
+  const platform = options.platform || SUPPORTED_PLATFORM;
+  const arch = options.arch || SUPPORTED_ARCH;
+  const listPackageImpl = options.listPackageImpl || listPackage;
+  const asarPath = path.join(packagedDirectory, 'resources', 'app.asar');
+  const unpackedModuleRoot = path.join(
+    packagedDirectory,
+    'resources',
+    'app.asar.unpacked',
+    'node_modules',
+    'node-pty',
+  );
+
+  let listedAsarEntries;
+  try {
+    listedAsarEntries = listPackageImpl(asarPath, {});
+  } catch (error) {
+    const details = error instanceof Error && error.message ? `: ${error.message}` : '';
+    throw new Error(`Failed to read packaged app archive at ${asarPath}${details}`);
+  }
+
+  if (!Array.isArray(listedAsarEntries)) {
+    throw new Error(`Failed to read packaged app archive at ${asarPath}: expected a file list.`);
+  }
+
+  const asarEntries = listedAsarEntries
+    .map((entryPath) => stripLeadingSlash(entryPath));
+  const requiredAsarEntries = [
+    'package.json',
+    'node_modules/node-pty/package.json',
+    'node_modules/node-pty/lib/index.js',
+  ];
+
+  for (const requiredEntry of requiredAsarEntries) {
+    if (!asarEntries.includes(requiredEntry)) {
+      throw new Error(`Packaged QuakeShell app is missing ${requiredEntry} inside ${asarPath}.`);
+    }
+  }
+
+  const archSpecificPrefix = `/bin/${platform}-${arch}-`;
+  const nativeBinaryPath = findFirstMatchingFile(
+    unpackedModuleRoot,
+    (filePath, fileName) => {
+      const normalizedPath = normalizePathForComparison(filePath);
+      return path.extname(fileName).toLowerCase() === '.node'
+        && (
+          normalizedPath.includes('/build/Release/')
+          || normalizedPath.includes(`/prebuilds/${platform}-${arch}/`)
+          || normalizedPath.includes(archSpecificPrefix)
+        );
+    },
+  );
+
+  if (!nativeBinaryPath) {
+    throw new Error(
+      `Packaged QuakeShell app is missing the unpacked ${platform}-${arch} node-pty native payload under ${unpackedModuleRoot}.`,
+    );
+  }
+
+  return nativeBinaryPath;
 }
 
 function runPackageBuild(packageRoot, platform, runner = spawnSync) {
@@ -213,6 +336,7 @@ async function buildReleaseAsset(options = {}) {
     minExecutableMtimeMs: buildStartedAt,
   });
   assertPackagedExecutableVersion(packagedDirectory, metadata, options.powerShellRunner || spawnSync);
+  assertPackagedNodePtyPayload(packagedDirectory);
   const assetName = getAssetName(metadata, SUPPORTED_PLATFORM, SUPPORTED_ARCH);
   const assetPath = path.join(packageRoot, 'release', assetName);
   createArchive(packagedDirectory, assetPath, options.powerShellRunner || spawnSync);
@@ -248,11 +372,14 @@ if (require.main === module) {
 
 module.exports = {
   assertPackagedExecutableVersion,
+  assertPackagedNodePtyPayload,
   buildReleaseAsset,
   computeFileSha256,
   createArchive,
+  findFirstMatchingFile,
   getExecutableVersion,
   isFreshExecutable,
+  normalizePathForComparison,
   normalizeVersion,
   resolvePackagedAppDir,
   runPackageBuild,
