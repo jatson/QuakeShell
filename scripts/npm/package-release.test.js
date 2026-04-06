@@ -4,6 +4,8 @@ const path = require('node:path');
 
 const {
   assertPackagedExecutableVersion,
+  assertPackagedNodePtyPayload,
+  normalizePathForComparison,
   resolvePackagedAppDir,
   runPackageBuild,
   writeChecksumFile,
@@ -115,5 +117,136 @@ describe('scripts/npm/package-release', () => {
     } finally {
       fs.rmSync(tempDirectory, { recursive: true, force: true });
     }
+  });
+
+  it('finds the unpacked node-pty native payload in packaged output', () => {
+    const tempDirectory = createTempDirectory();
+    const packagedDirectory = path.join(tempDirectory, 'out', 'quakeshell-win32-x64');
+    const asarPath = path.join(packagedDirectory, 'resources', 'app.asar');
+    const nativeBinaryPath = path.join(
+      packagedDirectory,
+      'resources',
+      'app.asar.unpacked',
+      'node_modules',
+      'node-pty',
+      'bin',
+      'win32-x64-145',
+      'node-pty.node',
+    );
+
+    try {
+      fs.mkdirSync(path.dirname(asarPath), { recursive: true });
+      fs.writeFileSync(asarPath, 'asar-bytes', 'utf8');
+      fs.mkdirSync(path.dirname(nativeBinaryPath), { recursive: true });
+      fs.writeFileSync(nativeBinaryPath, 'native-binary', 'utf8');
+
+      expect(assertPackagedNodePtyPayload(packagedDirectory, {
+        listPackageImpl: vi.fn(() => [
+          'package.json',
+          '/node_modules/node-pty/package.json',
+          '/node_modules/node-pty/lib/index.js',
+        ]),
+      })).toBe(nativeBinaryPath);
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('fails when packaged output is missing the node-pty wrapper inside app.asar', () => {
+    const tempDirectory = createTempDirectory();
+    const packagedDirectory = path.join(tempDirectory, 'out', 'quakeshell-win32-x64');
+    const nativeBinaryPath = path.join(
+      packagedDirectory,
+      'resources',
+      'app.asar.unpacked',
+      'node_modules',
+      'node-pty',
+      'build',
+      'Release',
+      'pty.node',
+    );
+
+    try {
+      fs.mkdirSync(path.dirname(nativeBinaryPath), { recursive: true });
+      fs.writeFileSync(nativeBinaryPath, 'native-binary', 'utf8');
+
+      expect(() => assertPackagedNodePtyPayload(packagedDirectory, {
+        listPackageImpl: vi.fn(() => []),
+      })).toThrow('missing package.json inside');
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts asar file lists without leading slashes', () => {
+    const tempDirectory = createTempDirectory();
+    const packagedDirectory = path.join(tempDirectory, 'out', 'quakeshell-win32-x64');
+    const nativeBinaryPath = path.join(
+      packagedDirectory,
+      'resources',
+      'app.asar.unpacked',
+      'node_modules',
+      'node-pty',
+      'build',
+      'Release',
+      'pty.node',
+    );
+
+    try {
+      fs.mkdirSync(path.dirname(nativeBinaryPath), { recursive: true });
+      fs.writeFileSync(nativeBinaryPath, 'native-binary', 'utf8');
+
+      expect(assertPackagedNodePtyPayload(packagedDirectory, {
+        listPackageImpl: vi.fn(() => [
+          'package.json',
+          'node_modules/node-pty/package.json',
+          'node_modules/node-pty/lib/index.js',
+        ]),
+      })).toBe(nativeBinaryPath);
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('fails with a clear error when app.asar cannot be read', () => {
+    const tempDirectory = createTempDirectory();
+    const packagedDirectory = path.join(tempDirectory, 'out', 'quakeshell-win32-x64');
+
+    try {
+      fs.mkdirSync(path.join(packagedDirectory, 'resources'), { recursive: true });
+
+      expect(() => assertPackagedNodePtyPayload(packagedDirectory, {
+        listPackageImpl: vi.fn(() => {
+          throw new Error('invalid archive');
+        }),
+      })).toThrow('Failed to read packaged app archive');
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('fails when packaged output is missing the unpacked node-pty native payload', () => {
+    const tempDirectory = createTempDirectory();
+    const packagedDirectory = path.join(tempDirectory, 'out', 'quakeshell-win32-x64');
+
+    try {
+      fs.mkdirSync(path.join(packagedDirectory, 'resources'), { recursive: true });
+
+      expect(() => assertPackagedNodePtyPayload(packagedDirectory, {
+        listPackageImpl: vi.fn(() => [
+          'package.json',
+          '/node_modules/node-pty/package.json',
+          '/node_modules/node-pty/lib/index.js',
+        ]),
+      })).toThrow('missing the unpacked win32-x64 node-pty native payload');
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('normalizes Windows separators before checking packaged file paths', () => {
+    expect(normalizePathForComparison('node_modules\\node-pty\\build\\Release\\pty.node')).toBe(
+      'node_modules/node-pty/build/Release/pty.node',
+    );
   });
 });
