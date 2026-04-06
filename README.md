@@ -7,6 +7,8 @@
 
 QuakeShell is a tray-resident Electron app that brings the beloved [Guake](https://github.com/Guake/guake)/[Yakuake](https://apps.kde.org/yakuake/) drop-down terminal experience to Windows, with GPU-accelerated rendering and sub-100ms toggle latency.
 
+The current repo state already includes most of the planned Phase 2 runtime work: tabs, split panes, theming, a dedicated settings window, window sizing controls, and Explorer integration. The active delivery channels today are GitHub Releases and the global npm package; broader package-manager automation is the remaining distribution work.
+
 <!-- Screenshots / demo GIF placeholder — add assets/demo.gif when available -->
 
 ---
@@ -14,14 +16,20 @@ QuakeShell is a tray-resident Electron app that brings the beloved [Guake](https
 ## Features
 
 - **Global hotkey toggle** — `Ctrl+Shift+Q` (customizable) shows/hides the terminal instantly
-- **Slide animation** — smooth 200ms drop-down from the top of your screen at 60fps
+- **Multi-tab workflow** — create, close, reorder, and jump between tabs with `Ctrl+T`, `Ctrl+W`, `Ctrl+Tab`, and `Ctrl+1`-`Ctrl+9`
+- **Split panes** — split the active tab with `Ctrl+Shift+D` for side-by-side terminal sessions
+- **Per-tab shell selection** — start tabs in PowerShell, PowerShell Core, WSL, Command Prompt, Git Bash, or a custom shell path
+- **Dedicated settings window** — `Ctrl+,` opens live settings for General, Appearance, Themes, Keyboard, and Distribution
+- **Built-in and community themes** — ships with Tokyo Night, Retro Green, and Solarized Dark, plus JSON themes from `%APPDATA%/QuakeShell/themes`
+- **Slide animation** — smooth drop-down from the top of your screen with configurable animation speed
 - **GPU-accelerated** — xterm.js with WebGL rendering for buttery terminal output
-- **PowerShell & WSL** — use your preferred shell out of the box
-- **Transparent overlay** — configurable opacity (default 85%) lets you see your work underneath
+- **Window sizing controls** — configurable height, width, and monitor targeting per display
+- **Transparent overlay** — configurable opacity with optional acrylic blur support on supported systems
 - **Focus-fade** — terminal auto-hides when you click away (configurable)
 - **Multi-monitor aware** — terminal appears on the monitor where your cursor is
 - **Hide ≠ Close** — your session, scrollback, and running processes survive every toggle
 - **Hot-reload config** — change settings without restarting the app
+- **Explorer integration** — optional `Open QuakeShell here` right-click menu for folders and folder backgrounds
 - **System tray resident** — no taskbar clutter, just a tray icon
 - **Silent autostart** — launches on Windows boot with zero visible splash
 - **Single instance** — only one QuakeShell runs; second launch focuses the existing one
@@ -35,7 +43,10 @@ QuakeShell is a tray-resident Electron app that brings the beloved [Guake](https
 
 - **Windows 10** version 1809 or later (requires ConPTY)
 - **Windows 11** fully supported
-- **Node.js 20+** and **npm 10+** for the global npm installer
+- **Windows x64** runtime for the packaged release asset consumed by the npm wrapper
+- **Node.js 20+** for the global npm installer (`npm 10+` recommended)
+- **Node.js 24+** if you plan to clone the repo, run `npm ci`, or use the `release:*` scripts from source
+- **Git** only if you plan to clone and develop from source
 
 ---
 
@@ -51,11 +62,17 @@ After install, launch QuakeShell from any terminal with:
 quakeshell
 ```
 
-The npm package is a thin Windows-only wrapper. During install it downloads the version-matched QuakeShell release asset from GitHub Releases into `%USERPROFILE%/.quakeshell/npm`, then wires the `quakeshell` command to that cached executable.
+The npm package is a thin Windows-only wrapper. During install it downloads the version-matched QuakeShell release zip from GitHub Releases into `%USERPROFILE%\.quakeshell\npm`, verifies the SHA-256 sidecar, and wires the `quakeshell` command to that cached executable.
 
-If you already have a mirrored or pre-downloaded executable, set `QUAKESHELL_BINARY_PATH` before install. If you need to pull release assets from a different base URL, set `QUAKESHELL_RELEASE_BASE_URL`.
+If you prefer a manual install, download `quakeshell-<version>-win32-x64.zip` from GitHub Releases, extract it anywhere, and launch `quakeshell.exe` directly.
 
-> **Coming in Phase 2:** `scoop install quakeshell` and `winget install QuakeShell`
+Advanced installer overrides:
+
+- `QUAKESHELL_BINARY_PATH` — use an existing local `quakeshell.exe` instead of downloading
+- `QUAKESHELL_ASSET_URL` or `QUAKESHELL_RELEASE_BASE_URL` — point the installer at a custom release mirror
+- `QUAKESHELL_INSTALL_ROOT` — change the cache/install root from `%USERPROFILE%\.quakeshell\npm`
+
+> npm and GitHub Releases are the active delivery channels today. Scoop and Winget publishing are the main remaining distribution tasks.
 
 ---
 
@@ -64,8 +81,15 @@ If you already have a mirrored or pre-downloaded executable, set `QUAKESHELL_BIN
 | Action | How |
 |--------|-----|
 | Toggle terminal | Press `Ctrl+Shift+Q` (or your configured hotkey) |
+| New tab | Press `Ctrl+T` |
+| Close tab | Press `Ctrl+W` |
+| Cycle tabs | Press `Ctrl+Tab` / `Ctrl+Shift+Tab` |
+| Jump to tab 1-9 | Press `Ctrl+1` through `Ctrl+9` |
+| Split active tab | Press `Ctrl+Shift+D` |
+| Open settings | Press `Ctrl+,` |
 | Toggle via tray | Left-click the tray icon |
 | Open context menu | Right-click the tray icon |
+| Launch into a folder | Register `Open QuakeShell here` from Settings -> Distribution, then use Explorer right-click |
 | Copy text | Select text, then `Ctrl+C` or `Ctrl+Shift+C` |
 | Paste text | `Ctrl+V` or `Ctrl+Shift+V` |
 | Scroll history | Mouse wheel or `Ctrl+Shift+Home` / `End` |
@@ -76,22 +100,44 @@ If you already have a mirrored or pre-downloaded executable, set `QUAKESHELL_BIN
 
 ## Configuration
 
-QuakeShell stores its config at `%APPDATA%/QuakeShell/config.json`. All settings are validated against a [Zod](https://zod.dev/) schema and hot-reload on save (except shell type, which requires a terminal restart).
+QuakeShell stores its config at `%APPDATA%\QuakeShell\config.json` and user themes at `%APPDATA%\QuakeShell\themes\*.json`. Settings are validated against a [Zod](https://zod.dev/) schema, and most of them hot-reload as soon as you save.
+
+A typical modern config looks like this:
 
 ```jsonc
 {
-  "hotkey": "Ctrl+Shift+Q",       // Global toggle hotkey
-  "defaultShell": "powershell",   // "powershell" or "wsl"
-  "opacity": 0.85,                // 0 (invisible) – 1 (opaque)
-  "focusFade": true,              // Auto-hide on blur
-  "animationSpeed": 200,          // Slide duration in ms (50–1000)
-  "fontSize": 14,                 // 8–32px
-  "fontFamily": "Cascadia Code, Consolas, Courier New, monospace",
-  "dropHeight": 30,               // Terminal height as % of screen (10–100)
-  "autostart": true,              // Launch on Windows boot
-  "firstRun": true                // Show onboarding overlay
+    "hotkey": "Ctrl+Shift+Q",
+    "defaultShell": "powershell",
+    "opacity": 0.85,
+    "focusFade": true,
+    "animationSpeed": 200,
+    "fontSize": 14,
+    "fontFamily": "Cascadia Code, Consolas, Courier New, monospace",
+    "lineHeight": 1.2,
+    "theme": "tokyo-night",
+    "autostart": true,
+    "acrylicBlur": false,
+    "window": {
+        "heightPercent": 40,
+        "widthPercent": 100,
+        "monitor": "active"
+    },
+    "tabs": {
+        "maxTabs": 10,
+        "colorPalette": [
+            "#7aa2f7",
+            "#9ece6a",
+            "#bb9af7",
+            "#e0af68",
+            "#7dcfff",
+            "#f7768e"
+        ]
+    },
+    "firstRun": true
 }
 ```
+
+`dropHeight` is still read for older configs, and the current runtime keeps a compatibility bridge between that legacy value and `window.heightPercent`. The example above shows the effective 40% window height most users will expect in current builds.
 
 ---
 
@@ -100,33 +146,44 @@ QuakeShell stores its config at `%APPDATA%/QuakeShell/config.json`. All settings
 ```mermaid
 graph TB
     subgraph Main Process
-        IX[index.ts — entry] --> WM[WindowManager]
+        IX[index.ts - startup] --> CS[ConfigStore]
+        IX --> WM[WindowManager]
+        IX --> TAB[TabManager]
         IX --> TM[TerminalManager]
-        IX --> CS[ConfigStore]
+        IX --> TH[ThemeEngine]
         IX --> HK[HotkeyManager]
         IX --> TR[TrayManager]
+        IX --> CTX[ContextMenuInstaller]
+        WM --> MW[Main Window]
+        WM --> SW[Settings Window]
         CS -->|hot-reload| WM
-        CS -->|hot-reload| TM
+        CS -->|hot-reload| TH
+        TAB -->|spawn/close| TM
         HK -->|toggle| WM
         TR -->|toggle| WM
-        TM -->|node-pty| PTY[PowerShell / WSL]
+        CTX -->|launch with --cwd| TAB
+        TM -->|node-pty| PTY[PowerShell / pwsh / WSL / CMD / Bash]
     end
 
-    subgraph Renderer Process
-        UI[Preact UI] --> XT[xterm.js + WebGL]
-        UI --> SIG[Signals State]
+    subgraph Renderer Processes
+        APP[Main UI] --> XT[xterm.js + WebGL]
+        APP --> SIG[Signals + config store]
+        SETUI[Settings UI] --> SIG
+        SETUI --> CFG[Theme / keyboard / distribution controls]
     end
 
-    WM <-->|IPC contextBridge| UI
-    TM <-->|IPC contextBridge| XT
-    CS <-->|IPC contextBridge| SIG
+    MW <-->|typed IPC| APP
+    SW <-->|typed IPC| SETUI
+    TAB <-->|tab events| APP
+    TH <-->|theme updates| APP
 ```
 
 **Key design decisions:**
-- Main process is the single source of truth for all state
+- Main process owns tabs, PTY lifecycle, window state, and themes
 - Renderer communicates exclusively through typed IPC channels via `contextBridge`
-- Window is pre-created and hidden — never spawned on demand — guaranteeing <100ms toggle
-- Terminal sessions persist across hide/show cycles (hide ≠ close)
+- The terminal window is pre-created and hidden instead of spawned on demand, keeping toggle latency low
+- Settings live in a dedicated lightweight window, so the terminal surface stays focused and reusable
+- The published npm package is wrapper-first: install pulls the matching packaged release asset instead of shipping the Electron app inside the tarball
 
 ---
 
@@ -134,7 +191,7 @@ graph TB
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Electron 41 (Chromium 146, Node.js 24) |
+| Runtime | Electron 41 |
 | Language | TypeScript |
 | Terminal | xterm.js 6 + WebGL addon |
 | PTY | node-pty (Windows ConPTY) |
@@ -150,20 +207,17 @@ graph TB
 ```bash
 # Clone and install
 git clone https://github.com/jatson/QuakeShell.git
-cd quakeshell
-npm install
+cd QuakeShell
+npm ci
 
 # Start dev server with hot-reload
 npm start
 
-# Run unit tests
+# Run the app test suite
 npm test
 
 # Run only the npm wrapper/distribution tests
 npm run test:npm
-
-# Lint
-npm run lint
 
 # Package the app
 npm run package
@@ -171,9 +225,18 @@ npm run package
 # Build installers
 npm run make
 
-# Produce the versioned npm wrapper asset locally
+# Produce the versioned wrapper release zip + checksum locally
 npm run release:dry-run
 ```
+
+Releases are driven by `.github/workflows/release.yml`, not by running `npm publish` manually from a workstation. The workflow expects a git tag that exactly matches `package.json`.
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+That tag triggers wrapper tests, builds `release/quakeshell-<version>-win32-x64.zip`, creates the GitHub release, and then publishes the npm package.
 
 ---
 
@@ -191,17 +254,19 @@ QuakeShell follows the [Electron security checklist](https://www.electronjs.org/
 
 ---
 
+## Status
+
+- Most Phase 2 runtime features are already in the repo: tabs, split panes, per-tab shell selection, themes, window sizing, settings, and Explorer integration.
+- The remaining Phase 2 gap is broader distribution rollout. GitHub Releases and npm are live; Scoop and Winget automation are next.
+
 ## Roadmap
 
-### Phase 2 — Growth (v1.x)
-- Multi-tab terminal sessions (`Ctrl+T` / `Ctrl+W`)
-- In-app settings GUI (`Ctrl+,`)
-- Per-tab shell switching (PowerShell ↔ WSL)
-- Theming engine with community themes
-- Scoop & Winget distribution
-- Shell context menu ("Open QuakeShell here")
+### Near Term
+- Finish Scoop publishing automation
+- Finish Winget PR automation
+- Keep tightening onboarding and update polish
 
-### Phase 3 — Expansion (v2+)
+### Longer Term
 - SSH, telnet, serial connections
 - Plugin architecture
 - Cross-platform (macOS, Linux)
@@ -225,7 +290,7 @@ QuakeShell follows the [Electron security checklist](https://www.electronjs.org/
 
 ## Contributing
 
-Contributions are welcome starting Phase 2. In the meantime, feel free to open issues for bugs and feature requests.
+Contributions are welcome. For runtime or UI changes, run `npm test`. For packaging or release changes, also run `npm run test:npm` and `npm run release:dry-run` before opening a PR.
 
 ---
 
