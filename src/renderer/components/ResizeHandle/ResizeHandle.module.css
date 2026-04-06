@@ -1,0 +1,22 @@
+.handle {
+  height: 6px;
+  width: 100%;
+  background: var(--border);
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.handle:hover {
+  background: var(--accent);
+}
+
+.grip {
+  width: 32px;
+  height: 2px;
+  background: var(--fg-dimmed);
+  border-radius: 1px;
+}

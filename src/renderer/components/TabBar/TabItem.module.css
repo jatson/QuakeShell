@@ -1,0 +1,74 @@
+.tabItem {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px 0 6px;
+  gap: 4px;
+  flex-shrink: 0;
+  cursor: pointer;
+  color: var(--fg-dimmed);
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  transition: color 100ms, background-color 100ms;
+  position: relative;
+  white-space: nowrap;
+}
+
+.tabItem.active {
+  color: var(--fg-primary);
+  background-color: var(--bg-terminal);
+  border-left-color: var(--accent);
+}
+
+.tabItem:not(.active):hover {
+  color: var(--fg-primary);
+  background-color: color-mix(in srgb, var(--bg-terminal) 40%, transparent);
+}
+
+.tabItem.dragging {
+  opacity: 0.7;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.colorDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tabName {
+  font-size: 12px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.closeButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0;
+  font-size: 11px;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 100ms, background-color 100ms;
+}
+
+.tabItem:hover .closeButton,
+.tabItem.active .closeButton {
+  opacity: 1;
+}
+
+.closeButton:hover {
+  background-color: color-mix(in srgb, var(--fg-primary) 20%, transparent);
+}

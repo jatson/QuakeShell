@@ -1,0 +1,58 @@
+.textInput {
+  width: 100%;
+  background: var(--bg-terminal);
+  color: var(--fg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.textInput:focus,
+.numberInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.numberInput {
+  width: 88px;
+  background: var(--bg-terminal);
+  color: var(--fg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  text-align: right;
+}
+
+.hint {
+  margin-top: 4px;
+  color: var(--fg-dimmed);
+  font-size: 11px;
+}
+
+.sliderRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.slider {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.sliderValue {
+  min-width: 40px;
+  color: var(--fg-primary);
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.validationError {
+  margin-top: 4px;
+  color: #ff6b6b;
+  font-size: 11px;
+}

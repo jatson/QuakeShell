@@ -1,0 +1,14 @@
+.selector {
+  background: var(--bg-chrome);
+  color: var(--fg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.selector:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

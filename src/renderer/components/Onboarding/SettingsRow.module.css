@@ -1,0 +1,16 @@
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-chrome);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  border-radius: 6px;
+  gap: 12px;
+}
+
+.label {
+  color: var(--fg-primary);
+  font-size: 14px;
+  white-space: nowrap;
+}

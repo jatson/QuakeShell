@@ -1,0 +1,73 @@
+.tabBar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  background-color: var(--bg-chrome);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.tabBar::-webkit-scrollbar { height: 4px; }
+.tabBar::-webkit-scrollbar-track { background: transparent; }
+.tabBar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.tabList {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 100%;
+  position: relative;
+}
+
+.addButton,
+.settingsButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--fg-dimmed);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 16px;
+  transition: color 150ms, background-color 150ms;
+}
+
+.addButton:hover,
+.settingsButton:hover {
+  color: var(--fg-primary);
+  background-color: var(--border);
+}
+
+.settingsButton {
+  margin-left: auto;
+  margin-right: 2px;
+}
+
+.settingsIcon {
+  display: inline-block;
+  transition: transform 300ms ease;
+}
+
+.settingsButton:hover .settingsIcon {
+  transform: rotate(90deg);
+}
+
+.dropIndicator {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  border-radius: 1px;
+}

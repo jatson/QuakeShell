@@ -1,0 +1,14 @@
+.keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-chrome);
+  border: 1px solid var(--border);
+  box-shadow: 0 3px 0 var(--black-bright);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  color: var(--fg-primary);
+  user-select: none;
+}

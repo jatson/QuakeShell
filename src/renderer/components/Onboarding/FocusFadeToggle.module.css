@@ -1,0 +1,23 @@
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: var(--font-size-label);
+  font-weight: 500;
+  transition: background 150ms ease;
+  color: var(--fg-primary);
+}
+
+.on {
+  background: var(--accent);
+  color: var(--bg-terminal);
+}
+
+.off {
+  background: var(--bg-chrome);
+}

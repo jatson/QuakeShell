@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.vite/
+dist/
+out/
+release/
+*.tsbuildinfo
+
+# Test outputs
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode-test/
+
+# Python environments/tools
+.venv/
+.venv-*/
+__pycache__/
+.pytest_cache/
+
+# Local AI/dev tool state
+.claude/
+.roo/
+
+# BMAD generated/runtime folders
+_bmad-output/
+_bmad/**/.cache/
+_bmad/**/tmp/
+_bmad/**/temp/
+_bmad/
+.github/
+
+# Keep docs and design artifacts tracked
+# (no ignore rules for docs/ or design-artifacts/)

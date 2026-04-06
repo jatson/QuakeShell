@@ -1,0 +1,57 @@
+.card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-terminal);
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+  text-align: left;
+}
+
+.card:hover {
+  border-color: var(--fg-dimmed);
+}
+
+.cardActive {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.name {
+  color: var(--fg-primary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source {
+  color: var(--fg-dimmed);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.swatch {
+  display: flex;
+  gap: 2px;
+  height: 16px;
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.swatchColor {
+  flex: 1;
+  min-width: 0;
+}
+
+.activeIndicator {
+  color: var(--accent);
+  font-size: 10px;
+  text-align: center;
+}

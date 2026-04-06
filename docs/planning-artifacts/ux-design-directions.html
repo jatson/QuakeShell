@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuakeShell — UX Design Directions</title>
+<style>
+  :root {
+    /* Tokyo Night inspired palette */
+    --bg-terminal: #1a1b26;
+    --bg-chrome: #13141c;
+    --fg-primary: #c0caf5;
+    --fg-dimmed: #565f89;
+    --accent: #7aa2f7;
+    --border: #2a2b3d;
+    --selection: #283457;
+    --red: #f7768e;
+    --green: #9ece6a;
+    --yellow: #e0af68;
+    --blue: #7aa2f7;
+    --magenta: #bb9af7;
+    --cyan: #7dcfff;
+    --black-bright: #414868;
+    --white-dim: #a9b1d6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, sans-serif;
+    background: #0f1019;
+    color: var(--fg-primary);
+    line-height: 1.6;
+  }
+
+  .header {
+    text-align: center;
+    padding: 48px 24px 32px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header h1 {
+    font-size: 32px;
+    font-weight: 300;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .header h1 span { color: var(--accent); font-weight: 600; }
+
+  .header p {
+    color: var(--fg-dimmed);
+    font-size: 14px;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .nav {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    background: #0f1019;
+    z-index: 100;
+  }
+
+  .nav button {
+    background: var(--bg-chrome);
+    border: 1px solid var(--border);
+    color: var(--fg-dimmed);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.2s;
+  }
+
+  .nav button:hover { border-color: var(--accent); color: var(--fg-primary); }
+  .nav button.active { border-color: var(--accent); color: var(--accent); background: var(--selection); }
+
+  .direction {
+    display: none;
+    padding: 32px 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .direction.active { display: block; }
+
+  .direction-header {
+    margin-bottom: 32px;
+  }
+
+  .direction-header h2 {
+    font-size: 24px;
+    font-weight: 400;
+    margin-bottom: 4px;
+  }
+
+  .direction-header h2 span { color: var(--accent); }
+
+  .direction-header p {
+    color: var(--fg-dimmed);
+    font-size: 14px;
+  }
+
+  .direction-header .tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-top: 8px;
+    margin-right: 4px;
+  }
+
+  .tag-v1 { background: var(--green); color: #000; opacity: 0.9; }
+  .tag-v2 { background: var(--yellow); color: #000; opacity: 0.9; }
+  .tag-theme { background: var(--magenta); color: #000; opacity: 0.9; }
+
+  /* Desktop simulation */
+  .desktop {
+    background: linear-gradient(135deg, #2d4a7a 0%, #1a3356 50%, #0d1f3c 100%);
+    border-radius: 8px;
+    height: 600px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+
+  .desktop-content {
+    padding: 40px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .desktop-window {
+    background: rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 12px;
+    width: 280px;
+    height: 200px;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .desktop-window .title-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .desktop-window .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+  }
+
+  .desktop-window .lines {
+    margin-top: 8px;
+  }
+
+  .desktop-window .line {
+    height: 8px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    margin-bottom: 6px;
+  }
+
+  .desktop-window .line:nth-child(1) { width: 80%; }
+  .desktop-window .line:nth-child(2) { width: 60%; }
+  .desktop-window .line:nth-child(3) { width: 70%; }
+  .desktop-window .line:nth-child(4) { width: 50%; }
+
+  /* QuakeShell terminal overlay */
+  .quakeshell {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    border-bottom: 2px solid var(--accent);
+  }
+
+  .quakeshell-30 { height: 30%; }
+  .quakeshell-40 { height: 40%; }
+
+  .terminal-area {
+    height: 100%;
+    padding: 12px 16px;
+    font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    overflow: hidden;
+  }
+
+  .terminal-area.opaque {
+    background: var(--bg-terminal);
+  }
+
+  .terminal-area.translucent {
+    background: rgba(26, 27, 38, 0.85);
+  }
+
+  .terminal-area.acrylic {
+    background: rgba(26, 27, 38, 0.7);
+    backdrop-filter: blur(20px);
+  }
+
+  .terminal-area.retro {
+    background: rgba(0, 10, 0, 0.9);
+  }
+
+  .prompt { color: var(--green); }
+  .cmd { color: var(--fg-primary); }
+  .path { color: var(--cyan); }
+  .flag { color: var(--yellow); }
+  .output { color: var(--white-dim); }
+  .error { color: var(--red); }
+  .comment { color: var(--fg-dimmed); }
+  .cursor { display: inline-block; width: 8px; height: 16px; background: var(--accent); animation: blink 1s step-end infinite; vertical-align: text-bottom; }
+
+  .retro .prompt { color: #33ff33; }
+  .retro .cmd { color: #ccffcc; }
+  .retro .path { color: #66ff66; }
+  .retro .flag { color: #ffcc00; }
+  .retro .output { color: #99cc99; }
+  .retro .cursor { background: #33ff33; }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  /* Tab bar */
+  .tab-bar {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    background: var(--bg-chrome);
+    border-bottom: 1px solid var(--border);
+    padding: 0 4px;
+    font-size: 12px;
+  }
+
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 4px 4px 0 0;
+    cursor: pointer;
+    color: var(--fg-dimmed);
+    position: relative;
+    height: 28px;
+  }
+
+  .tab.active {
+    color: var(--fg-primary);
+    background: var(--bg-terminal);
+  }
+
+  .tab.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 2px;
+    bottom: 2px;
+    width: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+  }
+
+  .tab .dot-color {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .tab .close {
+    opacity: 0;
+    color: var(--fg-dimmed);
+    font-size: 14px;
+    margin-left: 4px;
+    transition: opacity 0.15s;
+  }
+
+  .tab:hover .close { opacity: 1; }
+
+  .tab-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    color: var(--fg-dimmed);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 16px;
+  }
+
+  .tab-add:hover { background: var(--border); color: var(--fg-primary); }
+
+  /* Split pane */
+  .split-container {
+    display: flex;
+    height: calc(100% - 32px);
+  }
+
+  .split-pane {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .split-divider {
+    width: 2px;
+    background: var(--border);
+    cursor: col-resize;
+  }
+
+  .split-divider:hover { background: var(--accent); }
+
+  /* Onboarding overlay */
+  .onboarding-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .onboarding-card {
+    background: var(--bg-terminal);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px;
+    max-width: 480px;
+    text-align: center;
+    box-shadow: 0 24px 48px rgba(0,0,0,0.4);
+  }
+
+  .onboarding-card h3 {
+    font-size: 22px;
+    font-weight: 400;
+    margin-bottom: 12px;
+  }
+
+  .onboarding-card h3 span { color: var(--accent); }
+
+  .onboarding-card p {
+    color: var(--fg-dimmed);
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+
+  .hotkey-display {
+    display: inline-flex;
+    gap: 6px;
+    margin-bottom: 24px;
+  }
+
+  .key {
+    background: var(--bg-chrome);
+    border: 1px solid var(--border);
+    border-bottom: 3px solid var(--black-bright);
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-family: 'Cascadia Code', monospace;
+    font-size: 16px;
+    color: var(--fg-primary);
+  }
+
+  .key-plus {
+    display: flex;
+    align-items: center;
+    color: var(--fg-dimmed);
+    font-size: 14px;
+  }
+
+  .onboarding-hint {
+    color: var(--fg-dimmed);
+    font-size: 12px;
+    margin-top: 16px;
+  }
+
+  .onboarding-settings {
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+  }
+
+  .setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-chrome);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+
+  .setting-label {
+    font-size: 13px;
+    color: var(--fg-primary);
+  }
+
+  .setting-value {
+    font-size: 13px;
+    color: var(--accent);
+    font-family: 'Cascadia Code', monospace;
+  }
+
+  .slider-track {
+    width: 100px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    position: relative;
+  }
+
+  .slider-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  .slider-thumb {
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    position: absolute;
+    top: -4px;
+    transform: translateX(-50%);
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--fg-dimmed);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+
+  /* Details section */
+  .details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .detail-card {
+    background: var(--bg-chrome);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .detail-card h4 {
+    font-size: 13px;
+    color: var(--accent);
+    margin-bottom: 8px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .detail-card p, .detail-card li {
+    font-size: 13px;
+    color: var(--fg-dimmed);
+    line-height: 1.5;
+  }
+
+  .detail-card ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .detail-card li::before {
+    content: '›';
+    color: var(--accent);
+    margin-right: 8px;
+  }
+
+  /* Tray menu simulation */
+  .tray-menu {
+    position: absolute;
+    bottom: 48px;
+    right: 24px;
+    background: var(--bg-terminal);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    min-width: 180px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    font-size: 13px;
+  }
+
+  .tray-item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .tray-item:hover { background: var(--selection); }
+
+  .tray-item .shortcut { color: var(--fg-dimmed); font-size: 11px; }
+
+  .tray-separator {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  .taskbar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 44px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 8px;
+  }
+
+  .taskbar-icon {
+    width: 32px;
+    height: 32px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+  }
+
+  .tray-area {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .tray-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-family: 'Cascadia Code', monospace;
+  }
+
+  .tray-icon.qs {
+    background: var(--accent);
+    color: #000;
+    font-weight: bold;
+  }
+
+  @media (max-width: 768px) {
+    .details { grid-template-columns: 1fr; }
+    .desktop { height: 400px; }
+    .nav { gap: 4px; }
+    .nav button { padding: 6px 10px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Quake<span>Shell</span> — Design Directions</h1>
+  <p>Explore visual approaches for the QuakeShell drop-down terminal. Each direction shows how the terminal integrates with the Windows desktop.</p>
+</div>
+
+<div class="nav">
+  <button class="active" onclick="showDirection(1)">1. Minimal Pure</button>
+  <button onclick="showDirection(2)">2. Tabbed Clean</button>
+  <button onclick="showDirection(3)">3. Split Pane</button>
+  <button onclick="showDirection(4)">4. Acrylic Blur</button>
+  <button onclick="showDirection(5)">5. Retro Theme</button>
+  <button onclick="showDirection(6)">6. First-Run Onboarding</button>
+  <button onclick="showDirection(7)">7. Tray Menu</button>
+  <button onclick="showDirection(8)">8. Mouse Resize</button>
+</div>
+
+<!-- Direction 1: Minimal Pure -->
+<div class="direction active" id="dir-1">
+  <div class="direction-header">
+    <h2><span>Direction 1:</span> Minimal Pure</h2>
+    <p>The v1 default — just terminal, full width, 30% height, 85% opacity. Zero chrome. The terminal IS the UI.</p>
+    <span class="tag tag-v1">v1 Default</span>
+  </div>
+  <div class="desktop">
+    <div class="desktop-content">
+      <div class="desktop-window">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-bottom:8px">VS Code — project/src/index.ts</div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+      <div class="desktop-window">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-bottom:8px">Chrome — localhost:3000</div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+    </div>
+    <div class="quakeshell quakeshell-30">
+      <div class="terminal-area translucent">
+        <div><span class="prompt">PS C:\Projects\QuakeShell&gt;</span> <span class="cmd">git log</span> <span class="flag">--oneline</span> <span class="flag">-5</span></div>
+        <div><span class="output">a3f82d1 feat: add slide-down animation with easeOutCubic</span></div>
+        <div><span class="output">7c91e4b fix: hotkey registration on Windows 11</span></div>
+        <div><span class="output">2d08f3a refactor: extract WindowManager module</span></div>
+        <div><span class="output">e5b6c12 feat: implement focus-fade with configurable delay</span></div>
+        <div><span class="output">1a4d9e7 init: scaffold Electron Forge + Vite project</span></div>
+        <div style="margin-top:8px"><span class="prompt">PS C:\Projects\QuakeShell&gt;</span> <span class="cursor"></span></div>
+      </div>
+    </div>
+    <div class="taskbar">
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="tray-area">
+        <div class="tray-icon" style="background:rgba(255,255,255,0.15)"></div>
+        <div class="tray-icon" style="background:rgba(255,255,255,0.15)"></div>
+        <div class="tray-icon qs">&gt;_</div>
+        <div style="color:rgba(255,255,255,0.4);font-size:11px;margin-left:4px">11:42</div>
+      </div>
+    </div>
+  </div>
+  <div class="details">
+    <div class="detail-card">
+      <h4>Key Elements</h4>
+      <ul>
+        <li>Full monitor width, 30% height</li>
+        <li>85% opacity — desktop visible underneath</li>
+        <li>2px accent blue bottom border</li>
+        <li>No tab bar, no title bar, no chrome</li>
+        <li>Tray icon only — no taskbar presence</li>
+      </ul>
+    </div>
+    <div class="detail-card">
+      <h4>When to Use</h4>
+      <p>This is the core v1 experience. Single terminal session, maximum screen real estate for terminal content. The terminal appears as a native layer of the desktop, not a separate application.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Direction 2: Tabbed Clean -->
+<div class="direction" id="dir-2">
+  <div class="direction-header">
+    <h2><span>Direction 2:</span> Tabbed Clean</h2>
+    <p>Phase 2 tab bar — compact, auto-named, color-coded tabs. Browser-style keyboard shortcuts (Ctrl+T, Ctrl+W, Ctrl+Tab).</p>
+    <span class="tag tag-v1">v1</span>
+  </div>
+  <div class="desktop">
+    <div class="desktop-content">
+      <div class="desktop-window">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-bottom:8px">VS Code — project/src/index.ts</div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+      <div class="desktop-window">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-bottom:8px">Chrome — localhost:3000</div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+    </div>
+    <div class="quakeshell quakeshell-30">
+      <div class="tab-bar">
+        <div class="tab active">
+          <div class="dot-color" style="background:#7aa2f7"></div>
+          quakeshell
+          <span class="close">×</span>
+        </div>
+        <div class="tab">
+          <div class="dot-color" style="background:#9ece6a"></div>
+          npm run dev
+          <span class="close">×</span>
+        </div>
+        <div class="tab">
+          <div class="dot-color" style="background:#bb9af7"></div>
+          WSL: Ubuntu
+          <span class="close">×</span>
+        </div>
+        <div class="tab-add">+</div>
+      </div>
+      <div class="terminal-area translucent" style="height:calc(100% - 32px)">
+        <div><span class="prompt">PS C:\Projects\QuakeShell&gt;</span> <span class="cmd">npm test</span></div>
+        <div><span class="output"> PASS  src/config-store.test.ts</span></div>
+        <div><span class="output">  ✓ validates schema on load (3ms)</span></div>
+        <div><span class="output">  ✓ falls back to defaults on corruption (1ms)</span></div>
+        <div><span class="output">  ✓ hot-reloads on file change (12ms)</span></div>
+        <div style="margin-top:4px"><span class="green" style="color:var(--green)">Tests: 3 passed, 3 total</span></div>
+        <div style="margin-top:8px"><span class="prompt">PS C:\Projects\QuakeShell&gt;</span> <span class="cursor"></span></div>
+      </div>
+    </div>
+    <div class="taskbar">
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="tray-area">
+        <div class="tray-icon" style="background:rgba(255,255,255,0.15)"></div>
+        <div class="tray-icon qs">&gt;_</div>
+        <div style="color:rgba(255,255,255,0.4);font-size:11px;margin-left:4px">11:42</div>
+      </div>
+    </div>
+  </div>
+  <div class="details">
+    <div class="detail-card">
+      <h4>Tab Bar Features</h4>
+      <ul>
+        <li>32px height — minimal vertical space</li>
+        <li>Color dot per tab (auto-assigned palette)</li>
+        <li>Auto-naming: git repo → process → shell → dir</li>
+        <li>Active tab: accent blue left border indicator</li>
+        <li>Close button appears on hover (× or Ctrl+W)</li>
+        <li>+ button for new tab (or Ctrl+T)</li>
+      </ul>
+    </div>
+    <div class="detail-card">
+      <h4>Keyboard Shortcuts</h4>
+      <ul>
+        <li>Ctrl+T — new tab</li>
+        <li>Ctrl+W — close current tab</li>
+        <li>Ctrl+Tab — next tab</li>
+        <li>Ctrl+Shift+Tab — previous tab</li>
+        <li>Ctrl+1-9 — switch to tab by number</li>
+        <li>Double-click tab — rename</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- Direction 3: Split Pane -->
+<div class="direction" id="dir-3">
+  <div class="direction-header">
+    <h2><span>Direction 3:</span> Split Pane</h2>
+    <p>Side-by-side terminal views — frontend logs on the left, backend on the right. VS Code-inspired split with draggable divider.</p>
+    <span class="tag tag-v1">v1</span>
+  </div>
+  <div class="desktop">
+    <div class="desktop-content">
+      <div class="desktop-window" style="margin-top:220px">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-bottom:8px">Browser — app dashboard</div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+    </div>
+    <div class="quakeshell quakeshell-40">
+      <div class="tab-bar">
+        <div class="tab active">
+          <div class="dot-color" style="background:#9ece6a"></div>
+          frontend │ npm run dev
+          <span class="close">×</span>
+        </div>
+        <div class="tab active" style="border-left: 2px solid var(--yellow)">
+          <div class="dot-color" style="background:#e0af68"></div>
+          backend │ npm run dev
+          <span class="close">×</span>
+        </div>
+        <div class="tab">
+          <div class="dot-color" style="background:#7aa2f7"></div>
+          quakeshell
+          <span class="close">×</span>
+        </div>
+        <div class="tab-add">+</div>
+      </div>
+      <div class="split-container">
+        <div class="split-pane">
+          <div class="terminal-area translucent" style="height:100%;border-right:none">
+            <div><span class="comment">// frontend terminal</span></div>
+            <div><span class="prompt">$</span> <span class="cmd">npm run dev</span></div>
+            <div><span class="output">  VITE v5.4.2  ready in 326 ms</span></div>
+            <div><span class="output">  ➜  Local:   </span><span class="cyan" style="color:var(--cyan)">http://localhost:5173/</span></div>
+            <div><span class="output">  ➜  Network: </span><span class="cyan" style="color:var(--cyan)">http://192.168.1.42:5173/</span></div>
+            <div style="margin-top:4px"><span class="output">  [HMR] connected.</span></div>
+            <div><span class="output">  [HMR] updated: /src/App.tsx</span></div>
+          </div>
+        </div>
+        <div class="split-divider"></div>
+        <div class="split-pane">
+          <div class="terminal-area translucent" style="height:100%">
+            <div><span class="comment">// backend terminal</span></div>
+            <div><span class="prompt">$</span> <span class="cmd">npm run dev</span></div>
+            <div><span class="output">[nodemon] starting `ts-node src/server.ts`</span></div>
+            <div><span class="output">Server listening on port 3001</span></div>
+            <div><span class="output">DB connected: postgresql://localhost:5432</span></div>
+            <div style="margin-top:4px"><span class="output">GET /api/users 200 12ms</span></div>
+            <div><span class="output">POST /api/auth/login 200 45ms</span></div>
+            <div><span class="output">GET /api/dashboard 200 8ms</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="taskbar">
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="tray-area">
+        <div class="tray-icon qs">&gt;_</div>
+        <div style="color:rgba(255,255,255,0.4);font-size:11px;margin-left:4px">11:42</div>
+      </div>
+    </div>
+  </div>
+  <div class="details">
+    <div class="detail-card">
+      <h4>Split Pane Features</h4>
+      <ul>
+        <li>Draggable divider between panes</li>
+        <li>Each pane is an independent terminal session</li>
+        <li>Tab bar shows both active panes highlighted</li>
+        <li>40% height recommended for split view</li>
+        <li>Keyboard shortcut to split/unsplit</li>
+      </ul>
+    </div>
+    <div class="detail-card">
+      <h4>Use Case</h4>
+      <p>Frontend and backend log monitoring simultaneously. Docker compose output on one side, interactive shell on the other. Test runner + code output side by side. The split removes the need to tab-switch for parallel workflows.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Direction 4: Acrylic Blur -->
+<div class="direction" id="dir-4">
+  <div class="direction-header">
+    <h2><span>Direction 4:</span> Acrylic Blur</h2>
+    <p>Windows 11 Mica/Acrylic material — the desktop behind the terminal is blurred, not just dimmed. Premium native feel.</p>
+    <span class="tag tag-v2">Phase 2 · Win11 22H2+</span>
+  </div>
+  <div class="desktop">
+    <div class="desktop-content">
+      <div class="desktop-window">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-bottom:8px">VS Code — project/src/index.ts</div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+      <div class="desktop-window">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-bottom:8px">Chrome — localhost:3000</div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+    </div>
+    <div class="quakeshell quakeshell-30">
+      <div class="terminal-area acrylic">
+        <div><span class="prompt">PS C:\Projects\QuakeShell&gt;</span> <span class="cmd">docker compose up</span> <span class="flag">-d</span></div>
+        <div><span class="output"> ✔ Container quakeshell-db-1      Started  0.3s</span></div>
+        <div><span class="output"> ✔ Container quakeshell-redis-1    Started  0.4s</span></div>
+        <div><span class="output"> ✔ Container quakeshell-api-1      Started  0.8s</span></div>
+        <div style="margin-top:8px"><span class="prompt">PS C:\Projects\QuakeShell&gt;</span> <span class="cmd">docker ps</span> <span class="flag">--format</span> <span class="path">"table {{.Names}}\t{{.Status}}"</span></div>
+        <div><span class="output">NAMES                    STATUS</span></div>
+        <div><span class="output">quakeshell-api-1         Up 5 seconds</span></div>
+        <div><span class="output">quakeshell-redis-1       Up 6 seconds</span></div>
+        <div><span class="output">quakeshell-db-1          Up 6 seconds</span></div>
+        <div style="margin-top:8px"><span class="prompt">PS C:\Projects\QuakeShell&gt;</span> <span class="cursor"></span></div>
+      </div>
+    </div>
+    <div class="taskbar">
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="tray-area">
+        <div class="tray-icon qs">&gt;_</div>
+        <div style="color:rgba(255,255,255,0.4);font-size:11px;margin-left:4px">11:42</div>
+      </div>
+    </div>
+  </div>
+  <div class="details">
+    <div class="detail-card">
+      <h4>Acrylic Effect</h4>
+      <ul>
+        <li>Win11 22H2+ only (graceful fallback to opacity)</li>
+        <li>Electron: win.setBackgroundMaterial('acrylic')</li>
+        <li>70% opacity + blur — more readable than plain transparency</li>
+        <li>Desktop content blurred, not sharp — reduces distraction</li>
+        <li>Premium "native Windows" feel</li>
+      </ul>
+    </div>
+    <div class="detail-card">
+      <h4>Trade-offs</h4>
+      <p>Acrylic adds GPU overhead and may impact performance on integrated GPUs. Only available on Windows 11 22H2+. Falls back to standard opacity on older systems. Could be a user-configurable option rather than default.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Direction 5: Retro Theme -->
+<div class="direction" id="dir-5">
+  <div class="direction-header">
+    <h2><span>Direction 5:</span> Retro Terminal Theme</h2>
+    <p>Green-on-black CRT-inspired aesthetic — demonstrating theme system flexibility. Same layout, completely different mood.</p>
+    <span class="tag tag-theme">Theme Variant</span>
+  </div>
+  <div class="desktop">
+    <div class="desktop-content">
+      <div class="desktop-window">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-bottom:8px">VS Code — project/main.c</div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+    </div>
+    <div class="quakeshell quakeshell-30" style="border-bottom-color: #33ff33">
+      <div class="terminal-area retro">
+        <div><span class="prompt">C:\&gt;</span> <span class="cmd">dir</span></div>
+        <div><span class="output"> Volume in drive C is SYSTEM</span></div>
+        <div><span class="output"> Directory of C:\Projects\QuakeShell</span></div>
+        <div><span class="output"></span></div>
+        <div><span class="output">03/31/2026  11:42 AM    &lt;DIR&gt;          src</span></div>
+        <div><span class="output">03/31/2026  11:40 AM    &lt;DIR&gt;          docs</span></div>
+        <div><span class="output">03/31/2026  11:38 AM         1,247     package.json</span></div>
+        <div><span class="output">03/31/2026  11:38 AM           892     tsconfig.json</span></div>
+        <div><span class="output">               2 File(s)         2,139 bytes</span></div>
+        <div style="margin-top:8px"><span class="prompt">C:\Projects\QuakeShell&gt;</span> <span class="cursor" style="background:#33ff33"></span></div>
+      </div>
+    </div>
+    <div class="taskbar">
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="tray-area">
+        <div class="tray-icon" style="background:#33ff33;color:#000;font-weight:bold;font-size:9px;font-family:monospace">&gt;_</div>
+        <div style="color:rgba(255,255,255,0.4);font-size:11px;margin-left:4px">11:42</div>
+      </div>
+    </div>
+  </div>
+  <div class="details">
+    <div class="detail-card">
+      <h4>Theme System</h4>
+      <ul>
+        <li>xterm.js ITheme interface — full color control</li>
+        <li>All 16 ANSI colors + bg/fg + cursor + selection</li>
+        <li>Themes defined in JSON config</li>
+        <li>Hot-reloaded on config change</li>
+        <li>Community themes in Phase 2</li>
+      </ul>
+    </div>
+    <div class="detail-card">
+      <h4>Purpose</h4>
+      <p>This direction demonstrates that the theme system is flexible enough to support radically different aesthetics while maintaining the same layout and interaction patterns. The retro theme proves theming works — users will create their own.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Direction 6: First-Run Onboarding -->
+<div class="direction" id="dir-6">
+  <div class="direction-header">
+    <h2><span>Direction 6:</span> First-Run Onboarding</h2>
+    <p>The first experience after install — teach the hotkey, let user try it, configure basics. Under 30 seconds to first toggle.</p>
+    <span class="tag tag-v1">v1 Feature</span>
+  </div>
+  <div class="desktop">
+    <div class="desktop-content">
+      <div class="desktop-window" style="opacity:0.3">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+    </div>
+    <div class="quakeshell quakeshell-40">
+      <div class="terminal-area translucent" style="height:100%">
+        <div class="onboarding-overlay">
+          <div class="onboarding-card">
+            <h3>Welcome to <span>QuakeShell</span></h3>
+            <p>Your terminal is one keypress away. Try it now!</p>
+            <div class="hotkey-display">
+              <span class="key">Ctrl</span>
+              <span class="key-plus">+</span>
+              <span class="key">Shift</span>
+              <span class="key-plus">+</span>
+              <span class="key">Q</span>
+            </div>
+            <p style="font-size:13px;color:var(--fg-dimmed);margin-bottom:16px">Press this shortcut to toggle your terminal up and down</p>
+            <div class="onboarding-settings">
+              <div class="setting-row">
+                <span class="setting-label">Default Shell</span>
+                <span class="setting-value">PowerShell</span>
+              </div>
+              <div class="setting-row">
+                <span class="setting-label">Opacity</span>
+                <div class="slider-track" style="width:100px">
+                  <div class="slider-fill" style="width:85%"></div>
+                  <div class="slider-thumb" style="left:85%"></div>
+                </div>
+              </div>
+              <div class="setting-row">
+                <span class="setting-label">Hide on focus loss</span>
+                <span class="setting-value">On</span>
+              </div>
+            </div>
+            <div style="margin-top:20px;display:flex;gap:12px;justify-content:center">
+              <button class="btn-primary">Start Using QuakeShell</button>
+            </div>
+            <div class="onboarding-hint">You can change these anytime from the tray icon → Settings</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="taskbar">
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="tray-area">
+        <div class="tray-icon qs">&gt;_</div>
+        <div style="color:rgba(255,255,255,0.4);font-size:11px;margin-left:4px">11:42</div>
+      </div>
+    </div>
+  </div>
+  <div class="details">
+    <div class="detail-card">
+      <h4>Onboarding Flow</h4>
+      <ul>
+        <li>Shows on first launch only</li>
+        <li>Teaches the hotkey — the ONE thing that matters</li>
+        <li>Quick config: shell, opacity, focus-fade</li>
+        <li>"Start Using" dismisses overlay forever</li>
+        <li>Under 30 seconds total</li>
+      </ul>
+    </div>
+    <div class="detail-card">
+      <h4>Design Choices</h4>
+      <ul>
+        <li>Modal overlay over the terminal (not a separate window)</li>
+        <li>Physical key cap rendering — tactile, clear</li>
+        <li>Minimal settings — only the essentials</li>
+        <li>Single CTA — "Start Using QuakeShell"</li>
+        <li>Escape hatch: "change anytime from tray"</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- Direction 7: Tray Menu -->
+<div class="direction" id="dir-7">
+  <div class="direction-header">
+    <h2><span>Direction 7:</span> Tray Context Menu</h2>
+    <p>Right-click the tray icon — the secondary control interface. Settings access, update check, quit. Clean and minimal.</p>
+    <span class="tag tag-v1">v1 Feature</span>
+  </div>
+  <div class="desktop">
+    <div class="desktop-content">
+      <div class="desktop-window">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-bottom:8px">VS Code — project/src/index.ts</div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+      <div class="desktop-window">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-bottom:8px">Chrome — docs.quakeshell.dev</div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+    </div>
+    <div class="tray-menu">
+      <div class="tray-item">
+        <span>Toggle Terminal</span>
+        <span class="shortcut">Ctrl+Shift+Q</span>
+      </div>
+      <div class="tray-separator"></div>
+      <div class="tray-item">
+        <span>Edit Settings</span>
+        <span class="shortcut">opens JSON</span>
+      </div>
+      <div class="tray-item">
+        <span>Check for Updates</span>
+        <span></span>
+      </div>
+      <div class="tray-separator"></div>
+      <div class="tray-item">
+        <span>About QuakeShell</span>
+        <span class="shortcut">v1.0.0</span>
+      </div>
+      <div class="tray-item" style="color:var(--red)">
+        <span>Quit</span>
+        <span></span>
+      </div>
+    </div>
+    <div class="taskbar">
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="tray-area">
+        <div class="tray-icon" style="background:rgba(255,255,255,0.15)"></div>
+        <div class="tray-icon" style="background:rgba(255,255,255,0.15)"></div>
+        <div class="tray-icon qs" style="outline:2px solid var(--accent);outline-offset:2px">&gt;_</div>
+        <div style="color:rgba(255,255,255,0.4);font-size:11px;margin-left:4px">11:42</div>
+      </div>
+    </div>
+  </div>
+  <div class="details">
+    <div class="detail-card">
+      <h4>Tray Menu Items</h4>
+      <ul>
+        <li>Toggle Terminal — with hotkey reminder</li>
+        <li>Edit Settings — opens JSON in default editor</li>
+        <li>Check for Updates — manual update trigger</li>
+        <li>About — version info</li>
+        <li>Quit — closes QuakeShell entirely</li>
+      </ul>
+    </div>
+    <div class="detail-card">
+      <h4>Interaction</h4>
+      <ul>
+        <li>Left-click tray icon = toggle terminal</li>
+        <li>Right-click tray icon = context menu</li>
+        <li>Native OS context menu (Electron Tray API)</li>
+        <li>Minimal — only essential items</li>
+        <li>Phase 2 adds: theme selector, shell switcher</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- Direction 8: Mouse Resize -->
+<div class="direction" id="dir-8">
+  <div class="direction-header">
+    <h2><span>Direction 8:</span> Mouse-Drag Resize</h2>
+    <p>Drag the bottom edge of the terminal to adjust height. New height auto-saves to config — no manual save needed.</p>
+    <span class="tag tag-v1">v1 Feature</span>
+  </div>
+  <div class="desktop">
+    <div class="desktop-content">
+      <div class="desktop-window">
+        <div class="title-bar"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <div style="color:rgba(255,255,255,0.3);font-size:11px;margin-bottom:8px">VS Code — project/src/index.ts</div>
+        <div class="lines"><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>
+      </div>
+    </div>
+    <div class="quakeshell" style="height:45%" id="resize-demo">
+      <div class="terminal-area translucent" style="height:calc(100% - 6px)">
+        <div><span class="prompt">PS C:\Projects\QuakeShell&gt;</span> <span class="cmd">npm run build</span></div>
+        <div><span class="output">vite v5.4.2 building for production...</span></div>
+        <div><span class="output">✓ 42 modules transformed.</span></div>
+        <div><span class="output">dist/main.js    124.5 kB │ gzip: 38.2 kB</span></div>
+        <div><span class="output">dist/renderer.js  89.3 kB │ gzip: 27.1 kB</span></div>
+        <div><span class="output">✓ built in 1.82s</span></div>
+        <div style="margin-top:8px"><span class="prompt">PS C:\Projects\QuakeShell&gt;</span> <span class="cursor"></span></div>
+      </div>
+      <div style="height:6px;background:var(--border);cursor:ns-resize;display:flex;align-items:center;justify-content:center;transition:background 0.15s" onmouseenter="this.style.background='var(--accent)'" onmouseleave="this.style.background='var(--border)'">
+        <div style="width:32px;height:2px;background:var(--fg-dimmed);border-radius:1px"></div>
+      </div>
+    </div>
+    <div style="position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);pointer-events:none;text-align:center;z-index:10">
+      <div style="font-size:32px;color:var(--accent);margin-bottom:4px">↕</div>
+      <div style="background:rgba(0,0,0,0.7);color:var(--fg-primary);padding:6px 14px;border-radius:6px;font-size:12px;white-space:nowrap">Drag bottom edge to resize • Auto-saves to config</div>
+    </div>
+    <div class="taskbar">
+      <div class="taskbar-icon"></div>
+      <div class="taskbar-icon"></div>
+      <div class="tray-area">
+        <div class="tray-icon qs">&gt;_</div>
+        <div style="color:rgba(255,255,255,0.4);font-size:11px;margin-left:4px">11:42</div>
+      </div>
+    </div>
+  </div>
+  <div class="details">
+    <div class="detail-card">
+      <h4>Resize Interaction</h4>
+      <ul>
+        <li>6px drag handle at bottom edge of terminal</li>
+        <li>Cursor changes to ns-resize on hover</li>
+        <li>Handle highlights with accent color on hover</li>
+        <li>Small centered grip indicator (32px × 2px bar)</li>
+        <li>Drag up/down adjusts terminal height in real-time</li>
+        <li>Min height: 10% of screen, Max height: 90%</li>
+      </ul>
+    </div>
+    <div class="detail-card">
+      <h4>Auto-Save Behavior</h4>
+      <ul>
+        <li>New height saved to JSON config on drag-end</li>
+        <li>Debounced save — no writes during active drag</li>
+        <li>Persists across restarts and monitor changes</li>
+        <li>Height stored as percentage (adapts to resolution)</li>
+        <li>Per-monitor height in multi-monitor setups (future)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+function showDirection(n) {
+  document.querySelectorAll('.direction').forEach(d => d.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('dir-' + n).classList.add('active');
+  document.querySelectorAll('.nav button')[n-1].classList.add('active');
+}
+</script>
+
+</body>
+</html>

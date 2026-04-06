@@ -1,0 +1,35 @@
+.grid,
+.loadingGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.skeletonCard {
+  height: 102px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--bg-terminal) 92%, transparent) 0%,
+    color-mix(in srgb, var(--border) 30%, var(--bg-terminal) 70%) 50%,
+    color-mix(in srgb, var(--bg-terminal) 92%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+
+.error {
+  padding: 16px;
+  color: #ff6b6b;
+  text-align: center;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}

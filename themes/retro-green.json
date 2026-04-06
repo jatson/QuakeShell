@@ -1,0 +1,35 @@
+{
+  "id": "retro-green",
+  "name": "Retro Green",
+  "xtermTheme": {
+    "background": "#0a0f0a",
+    "foreground": "#33ff33",
+    "cursor": "#66ff66",
+    "cursorAccent": "#0a0f0a",
+    "selectionBackground": "#1a3d1a",
+    "black": "#0a0f0a",
+    "red": "#cc4444",
+    "green": "#33ff33",
+    "yellow": "#99cc33",
+    "blue": "#22aa55",
+    "magenta": "#55cc55",
+    "cyan": "#44ffaa",
+    "white": "#aaffaa",
+    "brightBlack": "#224422",
+    "brightRed": "#ff6666",
+    "brightGreen": "#66ff66",
+    "brightYellow": "#ccff66",
+    "brightBlue": "#44cc88",
+    "brightMagenta": "#88ff88",
+    "brightCyan": "#88ffcc",
+    "brightWhite": "#ccffcc"
+  },
+  "chromeTokens": {
+    "bgTerminal": "#0a0f0a",
+    "bgChrome": "#050805",
+    "fgPrimary": "#33ff33",
+    "fgDimmed": "#226622",
+    "accent": "#66ff66",
+    "border": "#1a3d1a"
+  }
+}

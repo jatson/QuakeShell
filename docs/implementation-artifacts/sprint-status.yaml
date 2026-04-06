@@ -1,0 +1,139 @@
+# generated: 2026-03-31
+# last_updated: 2026-03-31
+# project: QuakeShell
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: docs/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-03-31
+last_updated: 2026-04-06
+project: QuakeShell
+project_key: NOKEY
+tracking_system: file-system
+story_location: docs/implementation-artifacts
+
+development_status:
+  # Epic 1: Project Foundation & Core Shell Access
+  epic-1: in-progress
+  1-1-scaffold-electron-project-with-security-hardening: review
+  1-2-configuration-system-with-schema-validation: review
+  1-3-terminal-core-powershell-via-node-pty-and-xterm-js: review
+  1-4-window-management-toggle-animation-and-tray-icon: review
+  epic-1-retrospective: optional
+
+  # Epic 2: Configuration & Personalization
+  epic-2: in-progress
+  2-1-config-hot-reload-and-live-settings: review
+  2-2-opacity-control-and-focus-fade: review
+  2-3-hotkey-remapping-with-conflict-detection: review
+  2-4-shell-selection-and-animation-speed: review
+  epic-2-retrospective: optional
+
+  # Epic 3: Application Lifecycle & System Integration
+  epic-3: in-progress
+  3-1-single-instance-enforcement-and-silent-autostart: review
+  3-2-wsl-shell-support: review
+  3-3-tray-interactions-and-context-menu: review
+  3-4-shell-crash-recovery-and-exit-handling: review
+  3-5-multi-monitor-support: review
+  3-6-windows-notifications-and-update-checking: review
+  epic-3-retrospective: optional
+
+  # Epic 4: First-Run Onboarding
+  epic-4: in-progress
+  4-1-onboarding-overlay-with-hotkey-teaching: ready-for-dev
+  4-2-onboarding-quick-settings: ready-for-dev
+  epic-4-retrospective: optional
+
+  # Epic 5: Terminal UX Polish & Accessibility
+  epic-5: in-progress
+  5-1-design-token-system-tokyo-night-colors-and-css-custom-properties: ready-for-dev
+  5-2-mouse-drag-resize-handle: ready-for-dev
+  5-3-keyboard-focus-management: ready-for-dev
+  5-4-accessibility-screen-reader-high-contrast-and-reduced-motion: ready-for-dev
+  epic-5-retrospective: optional
+
+  # === PHASE 2 EPICS ===
+
+  # Phase 2 Epic 1: Config Schema Extension & IPC Foundation
+  p2-epic-1: in-progress
+  p2-1-1-extend-config-schema-phase2-keys: review
+  p2-1-2-refactor-terminal-data-ipc-to-tab-data: review
+  p2-epic-1-retrospective: optional
+
+  # Phase 2 Epic 2: Multi-Tab Session Model
+  p2-epic-2: in-progress
+  p2-2-1-tab-manager-module: review
+  p2-2-2-tab-bar-ui-component: ready-for-dev
+  p2-2-3-tab-keyboard-shortcuts: ready-for-dev
+  p2-2-4-tab-rename-inline: ready-for-dev
+  p2-2-5-tab-auto-naming: ready-for-dev
+  p2-2-6-per-tab-shell-type: ready-for-dev
+  p2-epic-2-retrospective: optional
+
+  # Phase 2 Epic 3: Split Pane
+  p2-epic-3: backlog
+  p2-3-1-split-pane-creation: ready-for-dev
+  p2-3-2-split-divider-drag: ready-for-dev
+  p2-3-3-close-pane: ready-for-dev
+  p2-epic-3-retrospective: optional
+
+  # Phase 2 Epic 4: Theming Engine
+  p2-epic-4: in-progress
+  p2-4-1-theme-engine-bundled-themes: review
+  p2-4-2-dual-channel-theme-apply: review
+  p2-4-3-community-themes-file-based-loading: review
+  p2-4-4-font-configuration: review
+  p2-epic-4-retrospective: optional
+
+  # Phase 2 Epic 5: Settings GUI Overlay
+  p2-epic-5: in-progress
+  p2-5-1-settings-panel-overlay-shell: review
+  p2-5-2-settings-general-tab: review
+  p2-5-3-settings-appearance-tab: review
+  p2-5-4-settings-themes-tab: review
+  p2-5-5-settings-keyboard-tab: review
+  p2-5-6-settings-distribution-tab: review
+  p2-epic-5-retrospective: optional
+
+  # Phase 2 Epic 6: Shell Context Menu
+  p2-epic-6: in-progress
+  p2-6-1-context-menu-installer-module: review
+  p2-6-2-squirrel-lifecycle-hook-integration: review
+  p2-6-3-cwd-cli-argument: review
+  p2-epic-6-retrospective: optional
+
+  # Phase 2 Epic 7: Distribution Packaging
+  p2-epic-7: backlog
+  p2-7-1-scoop-package-manifest: ready-for-dev
+  p2-7-2-winget-package-manifest: ready-for-dev
+  p2-epic-7-retrospective: optional

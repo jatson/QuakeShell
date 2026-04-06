@@ -1,0 +1,108 @@
+:root {
+  /* Tokyo Night color tokens */
+  --bg-terminal: #1a1b26;
+  --bg-chrome: #13141c;
+  --fg-primary: #c0caf5;
+  --fg-dimmed: #565f89;
+  --accent: #7aa2f7;
+  --border: #2a2b3d;
+  --red: #f7768e;
+  --green: #9ece6a;
+  --yellow: #e0af68;
+  --blue: #7aa2f7;
+  --magenta: #bb9af7;
+  --cyan: #7dcfff;
+  --black: #15161e;
+  --black-bright: #414868;
+  --white: #a9b1d6;
+  --white-bright: #c0caf5;
+
+  /* Spacing tokens (4px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Typography tokens */
+  --font-mono: 'Cascadia Code', Consolas, 'Courier New', monospace;
+  --font-ui: 'Segoe UI', -apple-system, sans-serif;
+  --font-size-label: 13px;
+  --font-size-heading: 18px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: var(--fg-primary);
+  font-family: var(--font-ui);
+}
+
+/* Force xterm viewport/screen transparent so container rgba() shows through */
+.xterm-viewport,
+.xterm-screen {
+  background-color: transparent !important;
+}
+
+/* Scrollbar: thin, themed, auto-hide when nothing to scroll */
+.xterm-viewport {
+  overflow-y: auto !important;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--black-bright);
+  border-radius: 3px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-dimmed);
+}
+
+/* Reduced motion: disable all animations and transitions */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0ms !important;
+    transition-duration: 0ms !important;
+  }
+}
+
+/* High contrast: use system colors, disable transparency */
+@media (forced-colors: active) {
+  :root {
+    --bg-terminal: Canvas;
+    --bg-chrome: Canvas;
+    --fg-primary: CanvasText;
+    --fg-dimmed: GrayText;
+    --accent: Highlight;
+    --border: ButtonBorder;
+  }
+
+  * {
+    forced-color-adjust: auto;
+  }
+
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px !important;
+  }
+}

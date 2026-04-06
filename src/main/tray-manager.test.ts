@@ -1,0 +1,290 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// --- Mocks ---
+// NOTE: vi.mock factories are hoisted before variable declarations.
+// We must use vi.hoisted() so these fns exist when the factory runs.
+
+const {
+  mockTrayDestroy,
+  mockTraySetToolTip,
+  mockTraySetContextMenu,
+  mockTraySetImage,
+  mockTrayOn,
+  mockAppQuit,
+  mockAppGetVersion,
+  mockAppSetAboutPanelOptions,
+  mockAppShowAboutPanel,
+  mockShellOpenPath,
+  nativeThemeState,
+  nativeThemeListeners,
+} = vi.hoisted(() => ({
+  mockTrayDestroy: vi.fn(),
+  mockTraySetToolTip: vi.fn(),
+  mockTraySetContextMenu: vi.fn(),
+  mockTraySetImage: vi.fn(),
+  mockTrayOn: vi.fn(),
+  mockAppQuit: vi.fn(),
+  mockAppGetVersion: vi.fn(() => '1.2.3'),
+  mockAppSetAboutPanelOptions: vi.fn(),
+  mockAppShowAboutPanel: vi.fn(),
+  mockShellOpenPath: vi.fn(),
+  nativeThemeState: { dark: true },
+  nativeThemeListeners: {} as Record<string, (() => void)[]>,
+}));
+
+vi.mock('electron', () => {
+  function MockTray() {
+    return {
+      destroy: mockTrayDestroy,
+      setToolTip: mockTraySetToolTip,
+      setContextMenu: mockTraySetContextMenu,
+      setImage: mockTraySetImage,
+      on: mockTrayOn,
+    };
+  }
+
+  const Menu = {
+    buildFromTemplate: vi.fn((template: unknown[]) => template),
+  };
+
+  return {
+    Tray: MockTray,
+    Menu,
+    app: {
+      quit: mockAppQuit,
+      getVersion: mockAppGetVersion,
+      setAboutPanelOptions: mockAppSetAboutPanelOptions,
+      showAboutPanel: mockAppShowAboutPanel,
+    },
+    nativeTheme: {
+      get shouldUseDarkColors() { return nativeThemeState.dark; },
+      on: vi.fn((event: string, cb: () => void) => {
+        if (!nativeThemeListeners[event]) nativeThemeListeners[event] = [];
+        nativeThemeListeners[event].push(cb);
+      }),
+    },
+    nativeImage: {
+      createFromPath: vi.fn((p: string) => p),
+    },
+    shell: {
+      openPath: mockShellOpenPath,
+    },
+  };
+});
+
+vi.mock('electron-log/main', () => {
+  const scopedLogger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  };
+  return {
+    default: {
+      scope: vi.fn(() => scopedLogger),
+    },
+  };
+});
+
+import { Menu, nativeImage } from 'electron';
+import { createTray, destroyTray, rebuildContextMenu } from './tray-manager';
+
+function getMenuTemplate(): Array<{ label?: string; type?: string; click?: () => void }> {
+  return (Menu.buildFromTemplate as ReturnType<typeof vi.fn>).mock.results[
+    (Menu.buildFromTemplate as ReturnType<typeof vi.fn>).mock.results.length - 1
+  ].value;
+}
+
+function findMenuItem(label: string) {
+  const template = getMenuTemplate();
+  return template.find((item) => item.label?.startsWith(label));
+}
+
+describe('main/tray-manager', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    nativeThemeState.dark = true;
+    for (const key of Object.keys(nativeThemeListeners)) {
+      delete nativeThemeListeners[key];
+    }
+  });
+
+  describe('createTray() — legacy overload', () => {
+    it('creates a Tray instance with icon and tooltip', () => {
+      const toggleFn = vi.fn();
+      createTray(toggleFn);
+
+      expect(mockTraySetToolTip).toHaveBeenCalledWith('QuakeShell');
+      expect(mockTraySetContextMenu).toHaveBeenCalled();
+    });
+
+    it('registers left-click handler that triggers toggle', () => {
+      const toggleFn = vi.fn();
+      createTray(toggleFn);
+
+      const clickCall = mockTrayOn.mock.calls.find(
+        (call: unknown[]) => call[0] === 'click',
+      );
+      expect(clickCall).toBeDefined();
+
+      const handler = clickCall![1] as () => void;
+      handler();
+      expect(toggleFn).toHaveBeenCalled();
+    });
+  });
+
+  describe('createTray() — options overload', () => {
+    const defaultOptions = () => ({
+      onToggle: vi.fn(),
+      getHotkey: vi.fn(() => 'Ctrl+Shift+Q'),
+      getConfigPath: vi.fn(() => 'C:\\Users\\test\\config.json'),
+      onQuit: vi.fn(),
+    });
+
+    it('creates tray with context menu containing all required items in order', () => {
+      const opts = defaultOptions();
+      createTray(opts);
+
+      const template = getMenuTemplate();
+      const labels = template.map((item) => item.label ?? item.type);
+
+      expect(labels).toEqual([
+        'Toggle Terminal\tCtrl+Shift+Q',
+        'separator',
+        'Edit Settings',
+        'Check for Updates',
+        'separator',
+        'About QuakeShell',
+        'Quit',
+      ]);
+    });
+
+    it('Toggle Terminal menu item calls onToggle', () => {
+      const opts = defaultOptions();
+      createTray(opts);
+
+      const item = findMenuItem('Toggle Terminal');
+      item!.click!();
+      expect(opts.onToggle).toHaveBeenCalled();
+    });
+
+    it('Toggle Terminal shows hotkey label from getHotkey()', () => {
+      const opts = defaultOptions();
+      opts.getHotkey.mockReturnValue('F12');
+      createTray(opts);
+
+      const item = findMenuItem('Toggle Terminal');
+      expect(item!.label).toBe('Toggle Terminal\tF12');
+    });
+
+    it('Edit Settings calls shell.openPath with config path', () => {
+      const opts = defaultOptions();
+      createTray(opts);
+
+      const item = findMenuItem('Edit Settings');
+      item!.click!();
+      expect(mockShellOpenPath).toHaveBeenCalledWith('C:\\Users\\test\\config.json');
+    });
+
+    it('About QuakeShell shows about panel with version', () => {
+      const opts = defaultOptions();
+      createTray(opts);
+
+      const item = findMenuItem('About QuakeShell');
+      item!.click!();
+
+      expect(mockAppSetAboutPanelOptions).toHaveBeenCalledWith({
+        applicationName: 'QuakeShell',
+        applicationVersion: '1.2.3',
+      });
+      expect(mockAppShowAboutPanel).toHaveBeenCalled();
+    });
+
+    it('Quit calls onQuit callback (graceful shutdown)', () => {
+      const opts = defaultOptions();
+      createTray(opts);
+
+      const item = findMenuItem('Quit');
+      item!.click!();
+      expect(opts.onQuit).toHaveBeenCalled();
+    });
+
+    it('left-click handler triggers toggle', () => {
+      const opts = defaultOptions();
+      createTray(opts);
+
+      const clickCall = mockTrayOn.mock.calls.find(
+        (call: unknown[]) => call[0] === 'click',
+      );
+      const handler = clickCall![1] as () => void;
+      handler();
+      expect(opts.onToggle).toHaveBeenCalled();
+    });
+  });
+
+  describe('theme-aware icons', () => {
+    it('uses dark icon when system is in dark mode', () => {
+      nativeThemeState.dark = true;
+      createTray(vi.fn());
+
+      // The icon path should contain 'icon-dark.ico' (taskbar is dark → use dark icon contrast)
+      // Actually: shouldUseDarkColors=true means dark theme → getIconPath returns 'icon-dark.ico'
+      const mockCreateFromPath = nativeImage.createFromPath as ReturnType<typeof vi.fn>;
+      const lastCall = mockCreateFromPath.mock.calls[0][0];
+      expect(lastCall).toContain('icon-dark.ico');
+    });
+
+    it('uses light icon when system is in light mode', () => {
+      nativeThemeState.dark = false;
+      createTray(vi.fn());
+
+      const mockCreateFromPath = nativeImage.createFromPath as ReturnType<typeof vi.fn>;
+      const lastCall = mockCreateFromPath.mock.calls[0][0];
+      expect(lastCall).toContain('icon-light.ico');
+    });
+
+    it('switches icon when theme changes', () => {
+      nativeThemeState.dark = true;
+      createTray(vi.fn());
+
+      // Simulate theme change
+      nativeThemeState.dark = false;
+      const updatedListeners = nativeThemeListeners['updated'] ?? [];
+      for (const cb of updatedListeners) cb();
+
+      expect(mockTraySetImage).toHaveBeenCalled();
+      const mockCreateFromPath = nativeImage.createFromPath as ReturnType<typeof vi.fn>;
+      const lastCall = mockCreateFromPath.mock.calls[mockCreateFromPath.mock.calls.length - 1][0];
+      expect(lastCall).toContain('icon-light.ico');
+    });
+  });
+
+  describe('rebuildContextMenu()', () => {
+    it('rebuilds context menu with updated hotkey label', () => {
+      const opts = {
+        onToggle: vi.fn(),
+        getHotkey: vi.fn(() => 'Ctrl+Shift+Q'),
+        getConfigPath: vi.fn(() => 'C:\\config.json'),
+        onQuit: vi.fn(),
+      };
+      createTray(opts);
+
+      // Change hotkey
+      opts.getHotkey.mockReturnValue('F12');
+      rebuildContextMenu();
+
+      // Verify menu was rebuilt
+      expect(mockTraySetContextMenu).toHaveBeenCalledTimes(2);
+      const item = findMenuItem('Toggle Terminal');
+      expect(item!.label).toBe('Toggle Terminal\tF12');
+    });
+  });
+
+  describe('destroyTray()', () => {
+    it('destroys the tray instance', () => {
+      createTray(vi.fn());
+      destroyTray();
+      expect(mockTrayDestroy).toHaveBeenCalled();
+    });
+  });
+});
