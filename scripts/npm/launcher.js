@@ -21,6 +21,30 @@ const {
   resolvePackageRoot,
 } = require('./distribution');
 
+function isSpawnUnknownError(error) {
+  return Boolean(
+    error
+      && typeof error === 'object'
+      && error.code === 'UNKNOWN'
+      && error.syscall === 'spawn',
+  );
+}
+
+function createLaunchError(error, executablePath, platform = process.platform) {
+  if (platform === 'win32' && isSpawnUnknownError(error)) {
+    return new Error(
+      `Windows blocked launching QuakeShell from ${executablePath}. This often indicates an Application Control, AppLocker, or WDAC policy blocking the unsigned executable. Allow the file or use a signed release. Original error: ${error.message}`,
+      { cause: error },
+    );
+  }
+
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return new Error(String(error));
+}
+
 function resolveExecutablePath(options = {}) {
   const packageRoot = options.packageRoot || resolvePackageRoot();
   const environment = options.environment || process.env;
@@ -97,14 +121,28 @@ function resolveExecutablePath(options = {}) {
 
 function launch(options = {}) {
   const spawnImpl = options.spawnImpl || spawn;
-  const executablePath = options.executablePath || resolveExecutablePath(options);
+  const platform = options.platform || process.platform;
+  let executablePath;
+
+  try {
+    executablePath = options.executablePath || resolveExecutablePath(options);
+  } catch (error) {
+    return Promise.reject(createLaunchError(error, options.executablePath || 'QuakeShell', platform));
+  }
+
   const args = options.args || process.argv.slice(2);
-  const child = spawnImpl(executablePath, args, {
-    cwd: options.cwd || process.cwd(),
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-  });
+
+  let child;
+  try {
+    child = spawnImpl(executablePath, args, {
+      cwd: options.cwd || process.cwd(),
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+  } catch (error) {
+    return Promise.reject(createLaunchError(error, executablePath, platform));
+  }
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -120,11 +158,15 @@ function launch(options = {}) {
 
     if (child && typeof child.once === 'function') {
       child.once('error', (error) => {
-        settle(reject, error);
+        settle(reject, createLaunchError(error, executablePath, platform));
       });
       child.once('spawn', () => {
         if (typeof child.unref === 'function') {
-          child.unref();
+          try {
+            child.unref();
+          } catch {
+            // The process has already spawned; failing to unref should not block launch.
+          }
         }
         settle(resolve, { executablePath, args });
       });
@@ -148,6 +190,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  createLaunchError,
+  isSpawnUnknownError,
   launch,
   resolveExecutablePath,
 };

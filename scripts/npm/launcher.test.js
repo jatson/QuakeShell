@@ -8,7 +8,12 @@ const {
   readPackageMetadata,
   writeInstallManifest,
 } = require('./distribution');
-const { launch, resolveExecutablePath } = require('./launcher');
+const {
+  createLaunchError,
+  isSpawnUnknownError,
+  launch,
+  resolveExecutablePath,
+} = require('./launcher');
 
 function createTempDirectory(prefix = 'quakeshell-launcher-') {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -148,6 +153,60 @@ describe('scripts/npm/launcher', () => {
     });
   });
 
+  it('rejects with a clear Windows policy message when spawn throws synchronously with UNKNOWN', async () => {
+    const context = createContext();
+    const executablePath = provisionInstallation(context);
+    const powerShellRunner = vi.fn(() => ({ status: 0, stdout: '9.9.9\n', stderr: '' }));
+    const launchError = Object.assign(new Error('spawn UNKNOWN'), {
+      code: 'UNKNOWN',
+      syscall: 'spawn',
+    });
+    const spawnImpl = vi.fn(() => {
+      throw launchError;
+    });
+
+    await expect(launch({
+      ...context,
+      arch: 'x64',
+      platform: 'win32',
+      powerShellRunner,
+      spawnImpl,
+    })).rejects.toThrow('Application Control, AppLocker, or WDAC policy');
+
+    expect(spawnImpl).toHaveBeenCalledWith(executablePath, [], {
+      cwd: process.cwd(),
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+  });
+
+  it('wraps asynchronous Windows UNKNOWN spawn errors with the same policy guidance', async () => {
+    const context = createContext();
+    const executablePath = provisionInstallation(context);
+    const powerShellRunner = vi.fn(() => ({ status: 0, stdout: '9.9.9\n', stderr: '' }));
+    const launchError = Object.assign(new Error('spawn UNKNOWN'), {
+      code: 'UNKNOWN',
+      syscall: 'spawn',
+    });
+    const once = vi.fn((eventName, handler) => {
+      if (eventName === 'error') {
+        handler(launchError);
+      }
+      return child;
+    });
+    const child = { once, unref: vi.fn() };
+    const spawnImpl = vi.fn(() => child);
+
+    await expect(launch({
+      ...context,
+      arch: 'x64',
+      platform: 'win32',
+      powerShellRunner,
+      spawnImpl,
+    })).rejects.toThrow('Application Control, AppLocker, or WDAC policy');
+  });
+
   it('throws a clear error when nothing is provisioned', () => {
     const context = createContext();
 
@@ -156,6 +215,16 @@ describe('scripts/npm/launcher', () => {
       arch: 'x64',
       platform: 'win32',
     })).toThrow('QuakeShell is not provisioned');
+  });
+
+  it('rejects instead of throwing when executable resolution fails during launch', async () => {
+    const context = createContext();
+
+    await expect(launch({
+      ...context,
+      arch: 'x64',
+      platform: 'win32',
+    })).rejects.toThrow('QuakeShell is not provisioned');
   });
 
   it('rejects cached executables whose embedded version does not match the package version', () => {
@@ -242,5 +311,50 @@ describe('scripts/npm/launcher', () => {
       },
       platform: 'win32',
     })).toThrow('must point to an existing .exe file');
+  });
+
+  it('recognizes Windows UNKNOWN spawn errors', () => {
+    expect(isSpawnUnknownError({ code: 'UNKNOWN', syscall: 'spawn' })).toBe(true);
+    expect(isSpawnUnknownError({ code: 'ENOENT', syscall: 'spawn' })).toBe(false);
+    expect(isSpawnUnknownError(null)).toBe(false);
+  });
+
+  it('formats Windows UNKNOWN spawn errors with actionable guidance', () => {
+    const launchError = Object.assign(new Error('spawn UNKNOWN'), {
+      code: 'UNKNOWN',
+      syscall: 'spawn',
+    });
+
+    expect(createLaunchError(launchError, 'C:/Users/backb/.quakeshell/quakeshell.exe', 'win32').message)
+      .toContain('Application Control, AppLocker, or WDAC policy');
+    expect(createLaunchError(new Error('spawn EPERM'), 'C:/temp/quakeshell.exe', 'win32').message)
+      .toBe('spawn EPERM');
+  });
+
+  it('still resolves when child.unref throws after spawn', async () => {
+    const context = createContext();
+    const executablePath = provisionInstallation(context);
+    const powerShellRunner = vi.fn(() => ({ status: 0, stdout: '9.9.9\n', stderr: '' }));
+    const once = vi.fn((eventName, handler) => {
+      if (eventName === 'spawn') {
+        handler();
+      }
+      return child;
+    });
+    const child = {
+      once,
+      unref: vi.fn(() => {
+        throw new Error('unref failed');
+      }),
+    };
+    const spawnImpl = vi.fn(() => child);
+
+    await expect(launch({
+      ...context,
+      arch: 'x64',
+      platform: 'win32',
+      powerShellRunner,
+      spawnImpl,
+    })).resolves.toMatchObject({ executablePath, args: [] });
   });
 });

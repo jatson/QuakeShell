@@ -62,7 +62,7 @@ const config: ForgeConfig = {
     ignore: ignoreNonPackagedRuntimeFiles,
   },
   rebuildConfig: {
-    onlyModules: ['node-pty'],
+    ignoreModules: ['node-pty'],
   },
   makers: [
     new MakerSquirrel({}),

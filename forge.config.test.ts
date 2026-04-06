@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ignoreNonPackagedRuntimeFiles } from './forge.config';
+import config, { ignoreNonPackagedRuntimeFiles } from './forge.config';
+
+describe('forge rebuildConfig', () => {
+  it('skips rebuilding node-pty because the shipped prebuild works with Electron', () => {
+    expect(config.rebuildConfig).toMatchObject({
+      ignoreModules: ['node-pty'],
+    });
+  });
+});
 
 describe('forge ignoreNonPackagedRuntimeFiles', () => {
   it('preserves the source renderer build tree needed by packaged releases', () => {
