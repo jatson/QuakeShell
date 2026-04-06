@@ -13,4 +13,16 @@ describe('forge ignoreNonPackagedRuntimeFiles', () => {
     expect(ignoreNonPackagedRuntimeFiles('src/main/index.ts')).toBe(true);
     expect(ignoreNonPackagedRuntimeFiles('src/renderer/components/App.tsx')).toBe(true);
   });
+
+  it('preserves runtime roots even when packager passes absolute temp paths', () => {
+    expect(ignoreNonPackagedRuntimeFiles('C:/Temp/app/src/renderer/.vite/renderer/main_window/index.html')).toBe(false);
+    expect(ignoreNonPackagedRuntimeFiles('C:/Temp/app/src/renderer')).toBe(false);
+    expect(ignoreNonPackagedRuntimeFiles('C:/Temp/app/.vite/build/index.js')).toBe(false);
+    expect(ignoreNonPackagedRuntimeFiles('C:/Temp/app/node_modules/node-pty/lib/index.js')).toBe(false);
+  });
+
+  it('still ignores unrelated absolute temp paths', () => {
+    expect(ignoreNonPackagedRuntimeFiles('C:/Temp/app/src/main/index.ts')).toBe(true);
+    expect(ignoreNonPackagedRuntimeFiles('C:/Temp/app/assets/tray/icon.png')).toBe(true);
+  });
 });

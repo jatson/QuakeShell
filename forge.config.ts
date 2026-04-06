@@ -20,14 +20,6 @@ const PACKAGED_RUNTIME_ROOTS = [
   PACKAGED_NODE_PTY_ROOT,
 ];
 
-function matchesPackagedRoot(filePath: string, rootPath: string): boolean {
-  return filePath === rootPath || filePath.startsWith(`${rootPath}/`);
-}
-
-function isAncestorOfPackagedRoot(filePath: string, rootPath: string): boolean {
-  return rootPath.startsWith(`${filePath}/`);
-}
-
 function normalizePackagerPath(file: unknown): string {
   if (typeof file !== 'string' || file.length === 0) {
     return '';
@@ -36,17 +28,31 @@ function normalizePackagerPath(file: unknown): string {
   return file.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
 }
 
-function ignoreNonPackagedRuntimeFiles(file: unknown): boolean {
+function getPackagerPathSuffixes(file: unknown): string[] {
   const normalizedFile = normalizePackagerPath(file);
   if (!normalizedFile) {
+    return [];
+  }
+
+  const segments = normalizedFile.split('/').filter(Boolean);
+  return segments.map((_, index) => segments.slice(index).join('/'));
+}
+
+function matchesPackagedRoot(file: unknown, rootPath: string): boolean {
+  const normalizedRoot = normalizePackagerPath(rootPath);
+  return getPackagerPathSuffixes(file).some((suffix) =>
+    suffix === normalizedRoot
+    || suffix.startsWith(`${normalizedRoot}/`)
+    || normalizedRoot.startsWith(`${suffix}/`),
+  );
+}
+
+function ignoreNonPackagedRuntimeFiles(file: unknown): boolean {
+  if (!normalizePackagerPath(file)) {
     return false;
   }
 
-  return !PACKAGED_RUNTIME_ROOTS.some((rootPath) => {
-    const normalizedRoot = normalizePackagerPath(rootPath);
-    return matchesPackagedRoot(normalizedFile, normalizedRoot)
-      || isAncestorOfPackagedRoot(normalizedFile, normalizedRoot);
-  });
+  return !PACKAGED_RUNTIME_ROOTS.some((rootPath) => matchesPackagedRoot(file, rootPath));
 }
 
 const config: ForgeConfig = {

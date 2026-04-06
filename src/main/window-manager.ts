@@ -70,7 +70,7 @@ function getPackagedRendererEntryCandidates(): string[] {
 
   return [
     path.join(__dirname, `../renderer/${rendererName}/index.html`),
-    path.join(__dirname, `../src/renderer/.vite/renderer/${rendererName}/index.html`),
+    path.join(__dirname, `../../src/renderer/.vite/renderer/${rendererName}/index.html`),
   ];
 }
 

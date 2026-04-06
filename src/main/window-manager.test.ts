@@ -250,10 +250,30 @@ describe('main/window-manager', () => {
 
     it('resolves the source renderer build path when the default packaged location is absent', () => {
       const resolvedPath = resolveRendererEntryPath((candidatePath) =>
-        candidatePath.includes(path.join('src', 'renderer', '.vite', 'renderer', 'main_window', 'index.html')),
+        candidatePath === path.join(
+          __dirname,
+          '..',
+          '..',
+          'src',
+          'renderer',
+          '.vite',
+          'renderer',
+          'main_window',
+          'index.html',
+        ),
       );
 
-      expect(resolvedPath).toContain(path.join('src', 'renderer', '.vite', 'renderer', 'main_window', 'index.html'));
+      expect(resolvedPath).toBe(path.join(
+        __dirname,
+        '..',
+        '..',
+        'src',
+        'renderer',
+        '.vite',
+        'renderer',
+        'main_window',
+        'index.html',
+      ));
     });
   });
 
