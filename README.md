@@ -100,7 +100,7 @@ Advanced installer overrides:
 
 ## Configuration
 
-QuakeShell stores its config at `%APPDATA%/QuakeShell/config.json` and user themes at `%APPDATA%/QuakeShell/themes/*.json`. Settings are validated against a [Zod](https://zod.dev/) schema, and most of them hot-reload as soon as you save.
+QuakeShell stores its config at `%APPDATA%\QuakeShell\config.json` and user themes at `%APPDATA%\QuakeShell\themes\*.json`. Settings are validated against a [Zod](https://zod.dev/) schema, and most of them hot-reload as soon as you save.
 
 A typical modern config looks like this:
 
