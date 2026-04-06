@@ -35,7 +35,10 @@ describe('scripts/npm/publish-manifest', () => {
         scripts: {
           prepack: 'node scripts/npm/publish-manifest.js prepare',
           postpack: 'node scripts/npm/publish-manifest.js restore',
+          publish: 'electron-forge publish',
+          postpublish: 'echo published',
           'release:asset': 'node scripts/npm/package-release.js',
+          'forge:publish': 'electron-forge publish',
           start: 'electron-forge start',
         },
       });

@@ -1,4 +1,5 @@
 import { BrowserWindow, screen, app, nativeTheme } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 import log from 'electron-log/main';
 import { type ConfigStore } from './config-store';
@@ -58,6 +59,42 @@ function isFocusFadeSuppressed(): boolean {
   return !isWindowUnavailable(settingsWindow);
 }
 
+function getPackagedRendererEntryCandidates(): string[] {
+  const rendererName = typeof MAIN_WINDOW_VITE_NAME === 'string'
+    ? MAIN_WINDOW_VITE_NAME.trim()
+    : '';
+
+  if (!rendererName) {
+    throw new Error('MAIN_WINDOW_VITE_NAME is not defined. Renderer assets cannot be resolved.');
+  }
+
+  return [
+    path.join(__dirname, `../renderer/${rendererName}/index.html`),
+    path.join(__dirname, `../src/renderer/.vite/renderer/${rendererName}/index.html`),
+  ];
+}
+
+export function resolveRendererEntryPath(
+  pathExists: (candidatePath: string) => boolean = fs.existsSync,
+): string {
+  const candidates = getPackagedRendererEntryCandidates();
+  const matchedPaths = candidates.filter((candidatePath) => pathExists(candidatePath));
+
+  if (matchedPaths.length > 0) {
+    if (matchedPaths.length > 1) {
+      logger.warn(`Multiple packaged renderer entries found. Preferring ${matchedPaths[0]}.`);
+    }
+
+    if (app.isPackaged && matchedPaths[0] !== candidates[0]) {
+      logger.info(`Loading packaged renderer from ${matchedPaths[0]}`);
+    }
+
+    return matchedPaths[0];
+  }
+
+  throw new Error(`No renderer entry HTML found. Tried: ${candidates.join(', ')}`);
+}
+
 function loadRendererWindow(targetWindow: BrowserWindow, query?: Record<string, string>): Promise<void> {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     const rendererUrl = new URL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -69,7 +106,7 @@ function loadRendererWindow(targetWindow: BrowserWindow, query?: Record<string, 
     return targetWindow.loadURL(rendererUrl.toString());
   }
 
-  const rendererPath = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
+  const rendererPath = resolveRendererEntryPath();
 
   if (query && Object.keys(query).length > 0) {
     return targetWindow.loadFile(rendererPath, { query });
@@ -168,7 +205,7 @@ export function createWindow(configStore: ConfigStore): BrowserWindow {
   configStoreRef = configStore;
   const dims = calcDimensions();
 
-  win = new BrowserWindow({
+  const createdWindow = new BrowserWindow({
     frame: false,
     resizable: false,
     alwaysOnTop: true,
@@ -188,6 +225,8 @@ export function createWindow(configStore: ConfigStore): BrowserWindow {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+
+  win = createdWindow;
 
   // Apply initial opacity from config (overridden to 1.0 in high contrast)
   const initialOpacity = nativeTheme.shouldUseHighContrastColors
@@ -214,7 +253,11 @@ export function createWindow(configStore: ConfigStore): BrowserWindow {
   });
 
   // Load renderer
-  void loadRendererWindow(win);
+  void Promise.resolve()
+    .then(() => loadRendererWindow(createdWindow))
+    .catch((error: unknown) => {
+    logger.error('Failed to load renderer window', error);
+  });
 
   // Open devtools in dev mode for debugging
   if (!app.isPackaged) {

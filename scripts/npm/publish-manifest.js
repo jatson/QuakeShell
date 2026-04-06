@@ -7,7 +7,7 @@ const { resolvePackageRoot } = require('./distribution');
 
 const PUBLISHED_MAIN = 'scripts/npm/launcher.js';
 const BACKUP_FILE = path.join('scripts', 'npm', '.package.json.prepack-backup.json');
-const OMITTED_PUBLISHED_SCRIPTS = ['prepack', 'postpack', 'release:asset', 'release:dry-run'];
+const OMITTED_PUBLISHED_SCRIPTS = ['prepack', 'postpack', 'publish', 'postpublish', 'forge:publish', 'release:asset', 'release:dry-run'];
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));

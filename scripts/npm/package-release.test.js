@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const {
   assertPackagedExecutableVersion,
+  assertPackagedRendererPayload,
   assertPackagedNodePtyPayload,
   normalizePathForComparison,
   resolvePackagedAppDir,
@@ -147,6 +148,83 @@ describe('scripts/npm/package-release', () => {
           '/node_modules/node-pty/lib/index.js',
         ]),
       })).toBe(nativeBinaryPath);
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('finds the packaged renderer payload under the source renderer build root', () => {
+    const tempDirectory = createTempDirectory();
+    const packagedDirectory = path.join(tempDirectory, 'out', 'quakeshell-win32-x64');
+    const asarPath = path.join(packagedDirectory, 'resources', 'app.asar');
+
+    try {
+      fs.mkdirSync(path.dirname(asarPath), { recursive: true });
+      fs.writeFileSync(asarPath, 'asar-bytes', 'utf8');
+
+      expect(assertPackagedRendererPayload(packagedDirectory, {
+        listPackageImpl: vi.fn(() => [
+          'src/renderer/.vite/renderer/main_window/index.html',
+          'src/renderer/.vite/renderer/main_window/assets/index-abc123.js',
+          'src/renderer/.vite/renderer/main_window/assets/index-def456.css',
+        ]),
+      })).toBe('src/renderer/.vite/renderer/main_window/index.html');
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts legacy packaged renderer output under .vite/renderer', () => {
+    const tempDirectory = createTempDirectory();
+    const packagedDirectory = path.join(tempDirectory, 'out', 'quakeshell-win32-x64');
+    const asarPath = path.join(packagedDirectory, 'resources', 'app.asar');
+
+    try {
+      fs.mkdirSync(path.dirname(asarPath), { recursive: true });
+      fs.writeFileSync(asarPath, 'asar-bytes', 'utf8');
+
+      expect(assertPackagedRendererPayload(packagedDirectory, {
+        listPackageImpl: vi.fn(() => [
+          '.vite/renderer/main_window/index.html',
+          '.vite/renderer/main_window/assets/index-legacy.js',
+        ]),
+      })).toBe('.vite/renderer/main_window/index.html');
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('fails when packaged output is missing the renderer entry HTML', () => {
+    const tempDirectory = createTempDirectory();
+    const packagedDirectory = path.join(tempDirectory, 'out', 'quakeshell-win32-x64');
+    const asarPath = path.join(packagedDirectory, 'resources', 'app.asar');
+
+    try {
+      fs.mkdirSync(path.dirname(asarPath), { recursive: true });
+      fs.writeFileSync(asarPath, 'asar-bytes', 'utf8');
+
+      expect(() => assertPackagedRendererPayload(packagedDirectory, {
+        listPackageImpl: vi.fn(() => []),
+      })).toThrow('missing the renderer entry HTML');
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('fails when packaged output is missing the renderer script bundle', () => {
+    const tempDirectory = createTempDirectory();
+    const packagedDirectory = path.join(tempDirectory, 'out', 'quakeshell-win32-x64');
+    const asarPath = path.join(packagedDirectory, 'resources', 'app.asar');
+
+    try {
+      fs.mkdirSync(path.dirname(asarPath), { recursive: true });
+      fs.writeFileSync(asarPath, 'asar-bytes', 'utf8');
+
+      expect(() => assertPackagedRendererPayload(packagedDirectory, {
+        listPackageImpl: vi.fn(() => [
+          'src/renderer/.vite/renderer/main_window/index.html',
+        ]),
+      })).toThrow('missing the renderer script bundle');
     } finally {
       fs.rmSync(tempDirectory, { recursive: true, force: true });
     }

@@ -8,6 +8,7 @@ inputDocuments:
   - docs/planning-artifacts/product-brief-QuakeShell.md
   - docs/planning-artifacts/product-brief-QuakeShell-distillate.md
   - docs/planning-artifacts/ux-design-specification.md
+  - docs/planning-artifacts/ux-design-specification-v3.md
   - docs/planning-artifacts/research/technical-quake-terminal-windows-research-2026-03-31.md
   - docs/planning-artifacts/architecture.md
   - docs/planning-artifacts/architecture-v2.md
@@ -20,6 +21,8 @@ date: '2026-04-06'
 # Architecture Decision Document - Phase 3
 
 _This document extends the v1 architecture (Phase 1) and v2 architecture (Phase 2) with Phase 3 decisions for multi-protocol sessions, plugin extensibility, profile sharing, cross-platform support, and restart-safe session management._
+
+_Companion UX artifact: `docs/planning-artifacts/ux-design-specification-v3.md` extends the base UX specification with the Phase 3 session launcher, profile library, trust flows, restore behavior, plugin dock, and cross-platform interaction rules assumed by this architecture._
 
 ---
 

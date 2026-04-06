@@ -151,18 +151,9 @@ function stripLeadingSlash(filePath) {
   return normalizePathForComparison(filePath).replace(/^\/+/, '');
 }
 
-function assertPackagedNodePtyPayload(packagedDirectory, options = {}) {
-  const platform = options.platform || SUPPORTED_PLATFORM;
-  const arch = options.arch || SUPPORTED_ARCH;
+function readPackagedAsarEntries(packagedDirectory, options = {}) {
   const listPackageImpl = options.listPackageImpl || listPackage;
   const asarPath = path.join(packagedDirectory, 'resources', 'app.asar');
-  const unpackedModuleRoot = path.join(
-    packagedDirectory,
-    'resources',
-    'app.asar.unpacked',
-    'node_modules',
-    'node-pty',
-  );
 
   let listedAsarEntries;
   try {
@@ -176,8 +167,52 @@ function assertPackagedNodePtyPayload(packagedDirectory, options = {}) {
     throw new Error(`Failed to read packaged app archive at ${asarPath}: expected a file list.`);
   }
 
-  const asarEntries = listedAsarEntries
-    .map((entryPath) => stripLeadingSlash(entryPath));
+  return {
+    asarPath,
+    asarEntries: listedAsarEntries.map((entryPath) => stripLeadingSlash(entryPath)),
+  };
+}
+
+function assertPackagedRendererPayload(packagedDirectory, options = {}) {
+  const { asarPath, asarEntries } = readPackagedAsarEntries(packagedDirectory, options);
+  const rendererRoots = [
+    'src/renderer/.vite/renderer/main_window',
+    '.vite/renderer/main_window',
+  ];
+  const matchedRendererRoot = rendererRoots.find((rendererRoot) =>
+    asarEntries.includes(`${rendererRoot}/index.html`),
+  );
+
+  if (!matchedRendererRoot) {
+    throw new Error(`Packaged QuakeShell app is missing the renderer entry HTML inside ${asarPath}.`);
+  }
+
+  const assetPrefix = `${matchedRendererRoot}/assets/`;
+  const hasRendererScript = asarEntries.some((entryPath) =>
+    entryPath.startsWith(assetPrefix) && entryPath.endsWith('.js'),
+  );
+
+  if (!hasRendererScript) {
+    throw new Error(
+      `Packaged QuakeShell app is missing the renderer script bundle under ${assetPrefix} inside ${asarPath}.`,
+    );
+  }
+
+  return `${matchedRendererRoot}/index.html`;
+}
+
+function assertPackagedNodePtyPayload(packagedDirectory, options = {}) {
+  const platform = options.platform || SUPPORTED_PLATFORM;
+  const arch = options.arch || SUPPORTED_ARCH;
+  const { asarPath, asarEntries } = readPackagedAsarEntries(packagedDirectory, options);
+  const unpackedModuleRoot = path.join(
+    packagedDirectory,
+    'resources',
+    'app.asar.unpacked',
+    'node_modules',
+    'node-pty',
+  );
+
   const requiredAsarEntries = [
     'package.json',
     'node_modules/node-pty/package.json',
@@ -336,6 +371,7 @@ async function buildReleaseAsset(options = {}) {
     minExecutableMtimeMs: buildStartedAt,
   });
   assertPackagedExecutableVersion(packagedDirectory, metadata, options.powerShellRunner || spawnSync);
+  assertPackagedRendererPayload(packagedDirectory);
   assertPackagedNodePtyPayload(packagedDirectory);
   const assetName = getAssetName(metadata, SUPPORTED_PLATFORM, SUPPORTED_ARCH);
   const assetPath = path.join(packageRoot, 'release', assetName);
@@ -372,6 +408,7 @@ if (require.main === module) {
 
 module.exports = {
   assertPackagedExecutableVersion,
+  assertPackagedRendererPayload,
   assertPackagedNodePtyPayload,
   buildReleaseAsset,
   computeFileSha256,

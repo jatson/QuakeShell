@@ -806,7 +806,7 @@ GitHub Actions (on push/PR):
   6. Upload artifacts (installer + portable zip)
 
 On tag (vX.Y.Z):
-  7. npm run publish (Electron Forge → GitHub Releases)
+  7. npm run forge:publish (Electron Forge → GitHub Releases)
   8. npm publish (npm package with postinstall binary download)
 ```
 

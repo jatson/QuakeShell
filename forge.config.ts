@@ -9,14 +9,23 @@ import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
 const PACKAGED_BUILD_ROOT = '/.vite';
+const PACKAGED_SOURCE_RENDERER_ROOT = '/src/renderer/.vite';
 const PACKAGED_NODE_MODULES_ROOT = '/node_modules';
 const PACKAGED_NODE_PTY_ROOT = '/node_modules/node-pty';
 
+const PACKAGED_RUNTIME_ROOTS = [
+  PACKAGED_BUILD_ROOT,
+  PACKAGED_SOURCE_RENDERER_ROOT,
+  PACKAGED_NODE_MODULES_ROOT,
+  PACKAGED_NODE_PTY_ROOT,
+];
+
 function matchesPackagedRoot(filePath: string, rootPath: string): boolean {
-  return filePath === rootPath
-    || filePath === rootPath.slice(1)
-    || filePath.startsWith(rootPath)
-    || filePath.startsWith(rootPath.slice(1));
+  return filePath === rootPath || filePath.startsWith(`${rootPath}/`);
+}
+
+function isAncestorOfPackagedRoot(filePath: string, rootPath: string): boolean {
+  return rootPath.startsWith(`${filePath}/`);
 }
 
 function normalizePackagerPath(file: unknown): string {
@@ -24,15 +33,7 @@ function normalizePackagerPath(file: unknown): string {
     return '';
   }
 
-  const normalizedPath = file.replace(/\\/g, '/');
-  for (const marker of [PACKAGED_BUILD_ROOT, PACKAGED_NODE_MODULES_ROOT]) {
-    const markerIndex = normalizedPath.indexOf(marker);
-    if (markerIndex !== -1) {
-      return normalizedPath.slice(markerIndex);
-    }
-  }
-
-  return normalizedPath;
+  return file.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
 }
 
 function ignoreNonPackagedRuntimeFiles(file: unknown): boolean {
@@ -41,9 +42,11 @@ function ignoreNonPackagedRuntimeFiles(file: unknown): boolean {
     return false;
   }
 
-  return !matchesPackagedRoot(normalizedFile, PACKAGED_NODE_MODULES_ROOT)
-    && !matchesPackagedRoot(normalizedFile, PACKAGED_BUILD_ROOT)
-    && !matchesPackagedRoot(normalizedFile, PACKAGED_NODE_PTY_ROOT);
+  return !PACKAGED_RUNTIME_ROOTS.some((rootPath) => {
+    const normalizedRoot = normalizePackagerPath(rootPath);
+    return matchesPackagedRoot(normalizedFile, normalizedRoot)
+      || isAncestorOfPackagedRoot(normalizedFile, normalizedRoot);
+  });
 }
 
 const config: ForgeConfig = {
@@ -99,5 +102,7 @@ const config: ForgeConfig = {
     }),
   ],
 };
+
+export { ignoreNonPackagedRuntimeFiles };
 
 export default config;

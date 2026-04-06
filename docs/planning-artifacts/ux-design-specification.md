@@ -13,6 +13,8 @@ inputDocuments:
 **Author:** Barna
 **Date:** 2026-03-31
 
+**Phase 3 extension:** See `docs/planning-artifacts/ux-design-specification-v3.md` for the follow-on UX work covering profiles, multi-protocol sessions, trust and secret handling, plugin panels, restart restore behavior, and cross-platform adjustments.
+
 ---
 
 ## Executive Summary

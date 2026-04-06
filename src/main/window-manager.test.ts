@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import path from 'node:path';
 
 // --- Mocks ---
 
@@ -135,6 +136,7 @@ import {
   startResizeDrag,
   stopResizeDrag,
   resetWindowHeight,
+  resolveRendererEntryPath,
   _reset,
 } from './window-manager';
 import { screen, nativeTheme } from 'electron';
@@ -245,6 +247,14 @@ describe('main/window-manager', () => {
       );
       expect(closeCall).toBeDefined();
     });
+
+    it('resolves the source renderer build path when the default packaged location is absent', () => {
+      const resolvedPath = resolveRendererEntryPath((candidatePath) =>
+        candidatePath.includes(path.join('src', 'renderer', '.vite', 'renderer', 'main_window', 'index.html')),
+      );
+
+      expect(resolvedPath).toContain(path.join('src', 'renderer', '.vite', 'renderer', 'main_window', 'index.html'));
+    });
   });
 
   describe('openSettingsWindow()', () => {
@@ -266,7 +276,7 @@ describe('main/window-manager', () => {
         skipTaskbar: true,
         alwaysOnTop: true,
       });
-      expect(mockLoadURL).toHaveBeenLastCalledWith('http://localhost:5173/?view=settings&tab=keyboard');
+      expect(mockLoadURL).toHaveBeenCalledWith('http://localhost:5173/?view=settings&tab=keyboard');
       expect(mockShow).toHaveBeenCalled();
       expect(mockFocus).toHaveBeenCalled();
     });
