@@ -41,6 +41,7 @@ __pycache__/
 # Local AI/dev tool state
 .claude/
 .roo/
+scripts/npm/.package.json.prepack-backup.json
 
 # BMAD generated/runtime folders
 _bmad-output/
@@ -48,7 +49,9 @@ _bmad/**/.cache/
 _bmad/**/tmp/
 _bmad/**/temp/
 _bmad/
-.github/
+.github/*
+!.github/workflows/
+!.github/workflows/**
 
 # Keep docs and design artifacts tracked
 # (no ignore rules for docs/ or design-artifacts/)

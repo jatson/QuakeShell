@@ -2,23 +2,65 @@
   "name": "quakeshell",
   "productName": "quakeshell",
   "version": "1.0.0",
-  "description": "My Electron application description",
+  "description": "Quake-style drop-down terminal for Windows, distributed as a global npm command.",
   "main": ".vite/build/index.js",
-  "private": true,
+  "bin": {
+    "quakeshell": "scripts/npm/launcher.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "README.md",
+    "scripts/npm/distribution.js",
+    "scripts/npm/launcher.js",
+    "scripts/npm/postinstall.js"
+  ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "ia32",
+    "x64"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
+    "postinstall": "node scripts/npm/postinstall.js",
+    "prepack": "node scripts/npm/publish-manifest.js prepare",
+    "postpack": "node scripts/npm/publish-manifest.js restore",
+    "release:asset": "node scripts/npm/package-release.js",
+    "release:dry-run": "node scripts/npm/package-release.js --dry-run",
     "lint": "eslint --ext .ts,.tsx .",
+    "test:npm": "vitest run --dir scripts/npm",
     "test": "vitest run"
   },
-  "keywords": [],
+  "keywords": [
+    "terminal",
+    "electron",
+    "windows",
+    "quake",
+    "powershell",
+    "wsl"
+  ],
   "author": {
     "name": "Jatson",
     "email": "back.barna@gmail.com"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jatson/QuakeShell.git"
+  },
+  "homepage": "https://github.com/jatson/QuakeShell#readme",
+  "bugs": {
+    "url": "https://github.com/jatson/QuakeShell/issues"
+  },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.1",
     "@electron-forge/maker-deb": "^7.11.1",

@@ -35,6 +35,7 @@ QuakeShell is a tray-resident Electron app that brings the beloved [Guake](https
 
 - **Windows 10** version 1809 or later (requires ConPTY)
 - **Windows 11** fully supported
+- **Node.js 20+** and **npm 10+** for the global npm installer
 
 ---
 
@@ -44,7 +45,15 @@ QuakeShell is a tray-resident Electron app that brings the beloved [Guake](https
 npm install -g quakeshell
 ```
 
-After install, QuakeShell registers for silent autostart on next Windows boot. You can also launch it manually from the Start menu or command line.
+After install, launch QuakeShell from any terminal with:
+
+```bash
+quakeshell
+```
+
+The npm package is a thin Windows-only wrapper. During install it downloads the version-matched QuakeShell release asset from GitHub Releases into `%USERPROFILE%/.quakeshell/npm`, then wires the `quakeshell` command to that cached executable.
+
+If you already have a mirrored or pre-downloaded executable, set `QUAKESHELL_BINARY_PATH` before install. If you need to pull release assets from a different base URL, set `QUAKESHELL_RELEASE_BASE_URL`.
 
 > **Coming in Phase 2:** `scoop install quakeshell` and `winget install QuakeShell`
 
@@ -140,7 +149,7 @@ graph TB
 
 ```bash
 # Clone and install
-git clone https://github.com/jatson/quakeshell.git
+git clone https://github.com/jatson/QuakeShell.git
 cd quakeshell
 npm install
 
@@ -150,6 +159,9 @@ npm start
 # Run unit tests
 npm test
 
+# Run only the npm wrapper/distribution tests
+npm run test:npm
+
 # Lint
 npm run lint
 
@@ -158,6 +170,9 @@ npm run package
 
 # Build installers
 npm run make
+
+# Produce the versioned npm wrapper asset locally
+npm run release:dry-run
 ```
 
 ---
