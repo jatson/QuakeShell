@@ -45,6 +45,7 @@ The current repo state already includes most of the planned Phase 2 runtime work
 - **Windows 11** fully supported
 - **Windows x64** runtime for the packaged release asset consumed by the npm wrapper
 - **Node.js 20+** for the global npm installer (`npm 10+` recommended)
+- **Node.js 24+** if you plan to clone the repo, run `npm ci`, or use the `release:*` scripts from source
 - **Git** only if you plan to clone and develop from source
 
 ---
