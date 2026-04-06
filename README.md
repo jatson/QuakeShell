@@ -112,7 +112,7 @@ A typical modern config looks like this:
     "focusFade": true,
     "animationSpeed": 200,
     "fontSize": 14,
-  "fontFamily": "Cascadia Code, Consolas, Courier New, monospace",
+    "fontFamily": "Cascadia Code, Consolas, Courier New, monospace",
     "lineHeight": 1.2,
     "theme": "tokyo-night",
     "autostart": true,
