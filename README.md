@@ -1,3 +1,5 @@
+<div align="center">
+    
 # QuakeShell
 
 **Quake-style drop-down terminal for Windows — instant shell access, always one keystroke away.**
@@ -7,9 +9,13 @@
 
 QuakeShell is a tray-resident Electron app that brings the beloved [Guake](https://github.com/Guake/guake)/[Yakuake](https://apps.kde.org/yakuake/) drop-down terminal experience to Windows, with GPU-accelerated rendering and sub-100ms toggle latency.
 
+<a href="https://buymeacoffee.com/jatson" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50"></a>
+
 The current repo state already includes most of the planned Phase 2 runtime work: tabs, split panes, theming, a dedicated settings window, window sizing controls, and Explorer integration. The active delivery channels today are GitHub Releases and the global npm package; broader package-manager automation is the remaining distribution work.
 
 <!-- Screenshots / demo GIF placeholder — add assets/demo.gif when available -->
+
+</div>
 
 ---
 
