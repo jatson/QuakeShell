@@ -26,7 +26,7 @@ The current repo state already includes most of the planned Phase 2 runtime work
 - **Split panes** — split the active tab with `Ctrl+Shift+D` for side-by-side terminal sessions
 - **Per-tab shell selection** — start tabs in PowerShell, PowerShell Core, WSL, Command Prompt, Git Bash, or a custom shell path
 - **Dedicated settings window** — `Ctrl+,` opens live settings for General, Appearance, Themes, Keyboard, and Distribution
-- **Built-in and community themes** — ships with Tokyo Night, Retro Green, and Solarized Dark, plus JSON themes from `%APPDATA%/QuakeShell/themes`
+- **Built-in and community themes** — ships with Tokyo Night, Retro Green, Solarized Dark, plus extra bundled dark/light theme packs, and supports user JSON themes from `%APPDATA%/QuakeShell/themes`
 - **Slide animation** — smooth drop-down from the top of your screen with configurable animation speed
 - **GPU-accelerated** — xterm.js with WebGL rendering for buttery terminal output
 - **Window sizing controls** — configurable height, width, and monitor targeting per display
@@ -107,6 +107,8 @@ Advanced installer overrides:
 ## Configuration
 
 QuakeShell stores its config at `%APPDATA%\QuakeShell\config.json` and user themes at `%APPDATA%\QuakeShell\themes\*.json`. Settings are validated against a [Zod](https://zod.dev/) schema, and most of them hot-reload as soon as you save.
+
+Out of the box, QuakeShell includes 15 shipped presets: the 3 core themes (`tokyo-night`, `retro-green`, `solarized-dark`) and 12 additional presets from the bundled dark/light theme packs. User community themes in `%APPDATA%\QuakeShell\themes` are layered after those shipped presets and cannot override shipped theme IDs.
 
 A typical modern config looks like this:
 

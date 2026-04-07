@@ -29,6 +29,22 @@ const themes = [
     },
   },
   {
+    id: 'midnight-mint',
+    name: 'Midnight Mint',
+    source: 'bundled' as const,
+    swatchColors: ['#0f1413', '#67d5b5'],
+    chromeAccent: '#67d5b5',
+    xtermTheme: {} as never,
+    chromeTokens: {
+      bgTerminal: '#0f1413',
+      bgChrome: '#131a19',
+      fgPrimary: '#c8d6d1',
+      fgDimmed: '#7f918b',
+      accent: '#67d5b5',
+      border: '#22302d',
+    },
+  },
+  {
     id: 'custom-blue',
     name: 'Custom Blue',
     source: 'community' as const,
@@ -91,6 +107,18 @@ describe('ThemesSettings', () => {
     await flush();
 
     expect(container.textContent).toContain('Tokyo Night');
+    expect(container.textContent).toContain('Midnight Mint');
+    expect(container.textContent).toContain('Custom Blue');
+  });
+
+  it('renders shipped pack themes alongside core bundled and community themes', async () => {
+    await act(async () => {
+      render(<ThemesSettings />, container);
+    });
+    await flush();
+
+    expect(container.textContent).toContain('Tokyo Night');
+    expect(container.textContent).toContain('Midnight Mint');
     expect(container.textContent).toContain('Custom Blue');
   });
 
