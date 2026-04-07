@@ -108,9 +108,20 @@ function copyStringEnv(
   return copiedEnv;
 }
 
-function normalizeWindowsPathSegment(segment: string): string {
-  return path.win32.normalize(segment).replace(/[\\/]+$/, '').toLowerCase();
+function isNormalizedWindowsRootPath(segment: string): boolean {
+  return /^[A-Za-z]:\\$/.test(segment) || /^\\\\[^\\]+\\[^\\]+\\$/.test(segment);
 }
+
+function normalizeWindowsPathSegment(segment: string): string {
+  const normalizedSegment = path.win32.normalize(segment);
+  const comparableSegment = isNormalizedWindowsRootPath(normalizedSegment)
+    ? normalizedSegment
+    : normalizedSegment.replace(/[\\/]+$/, '');
+
+  return comparableSegment.toLowerCase();
+}
+
+const WINDOWS_PATH_DELIMITER = path.win32.delimiter;
 
 function dedupeWindowsPathSegments(segments: string[]): string[] {
   const seen = new Set<string>();
@@ -154,7 +165,7 @@ export function normalizeWindowsSpawnEnv(
       if (rightKey === 'PATH') return 1;
       return leftKey.localeCompare(rightKey);
     })
-    .flatMap(([, value]) => value.split(path.delimiter));
+    .flatMap(([, value]) => (value ? value.split(WINDOWS_PATH_DELIMITER) : []));
 
   const voltaHome = env.VOLTA_HOME?.trim();
   if (voltaHome) {
@@ -163,7 +174,7 @@ export function normalizeWindowsSpawnEnv(
 
   const dedupedPathSegments = dedupeWindowsPathSegments(mergedPathSegments);
   if (dedupedPathSegments.length > 0) {
-    normalizedEnv.Path = dedupedPathSegments.join(path.delimiter);
+    normalizedEnv.Path = dedupedPathSegments.join(WINDOWS_PATH_DELIMITER);
   }
 
   const systemRoot = normalizedEnv.SystemRoot ?? env.SystemRoot ?? env.windir ?? env.WINDIR;
@@ -423,6 +434,11 @@ export function setDefaultShell(shell: string): void {
 /** Get the current default shell preference (pending or initial) */
 export function getDefaultShell(): string {
   return pendingDefaultShell ?? 'powershell';
+}
+
+/** @internal For test use only */
+export function _normalizeWindowsPathSegmentForComparison(segment: string): string {
+  return normalizeWindowsPathSegment(segment);
 }
 
 /** @internal For test use only */
