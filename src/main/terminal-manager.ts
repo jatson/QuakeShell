@@ -145,6 +145,31 @@ function dedupeWindowsPathSegments(segments: string[]): string[] {
   return dedupedSegments;
 }
 
+function deriveVoltaHomeFromPathSegments(segments: string[]): string | null {
+  for (const segment of segments) {
+    const trimmedSegment = segment.trim();
+    if (!trimmedSegment) {
+      continue;
+    }
+
+    const normalizedSegment = path.win32.normalize(trimmedSegment);
+    const marker = `${path.win32.sep}tools${path.win32.sep}image${path.win32.sep}`.toLowerCase();
+    const loweredSegment = normalizedSegment.toLowerCase();
+    const markerIndex = loweredSegment.indexOf(marker);
+
+    if (markerIndex === -1) {
+      continue;
+    }
+
+    const candidateHome = normalizedSegment.slice(0, markerIndex);
+    if (candidateHome) {
+      return candidateHome;
+    }
+  }
+
+  return null;
+}
+
 export function normalizeWindowsSpawnEnv(
   env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
 ): Record<string, string> {
@@ -167,7 +192,7 @@ export function normalizeWindowsSpawnEnv(
     })
     .flatMap(([, value]) => (value ? value.split(WINDOWS_PATH_DELIMITER) : []));
 
-  const voltaHome = env.VOLTA_HOME?.trim();
+  const voltaHome = env.VOLTA_HOME?.trim() || deriveVoltaHomeFromPathSegments(mergedPathSegments);
   if (voltaHome) {
     mergedPathSegments.unshift(path.win32.join(voltaHome, 'bin'));
   }

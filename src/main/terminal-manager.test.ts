@@ -385,6 +385,20 @@ describe('main/terminal-manager', () => {
       expect(env.Path.split(path.win32.delimiter)[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
     });
 
+    it('derives the Volta shim directory from tool image bins when VOLTA_HOME is missing', () => {
+      const env = normalizeWindowsSpawnEnv({
+        Path: [
+          'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin',
+          'C:\\Windows\\System32',
+        ].join(path.win32.delimiter),
+        SystemRoot: 'C:\\Windows',
+      });
+
+      const pathSegments = env.Path.split(path.win32.delimiter);
+      expect(pathSegments[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
+      expect(pathSegments).toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+    });
+
     it('hydrates SystemRoot from windir when PowerShell prerequisites are missing', () => {
       const env = normalizeWindowsSpawnEnv({
         Path: 'C:\\Windows\\System32',
