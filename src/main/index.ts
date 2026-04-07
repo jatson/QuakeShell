@@ -7,6 +7,7 @@ import { registerIpcHandlers } from './ipc-handlers';
 import * as windowManager from './window-manager';
 import * as trayManager from './tray-manager';
 import * as hotkeyManager from './hotkey-manager';
+import * as notificationManager from './notification-manager';
 import * as terminalManager from './terminal-manager';
 import * as tabManager from './tab-manager';
 import { themeEngine } from './theme-engine';
@@ -61,6 +62,7 @@ if (!handleSquirrelLifecycle()) {
     // 2. Apply autostart setting from config
     applyAutostart(configStore.get('autostart'));
     registerAutostartConfigHandler(configStore);
+    notificationManager.setUpdateRestartHandler(() => gracefulShutdown());
 
     // 3. Create tray icon with full context menu
     trayManager.createTray({

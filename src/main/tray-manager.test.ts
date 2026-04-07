@@ -12,8 +12,7 @@ const {
   mockTrayOn,
   mockAppQuit,
   mockAppGetVersion,
-  mockAppSetAboutPanelOptions,
-  mockAppShowAboutPanel,
+  mockDialogShowMessageBox,
   mockShellOpenPath,
   nativeThemeState,
   nativeThemeListeners,
@@ -25,8 +24,7 @@ const {
   mockTrayOn: vi.fn(),
   mockAppQuit: vi.fn(),
   mockAppGetVersion: vi.fn(() => '1.2.3'),
-  mockAppSetAboutPanelOptions: vi.fn(),
-  mockAppShowAboutPanel: vi.fn(),
+  mockDialogShowMessageBox: vi.fn(() => Promise.resolve({ response: 0 })),
   mockShellOpenPath: vi.fn(),
   nativeThemeState: { dark: true },
   nativeThemeListeners: {} as Record<string, (() => void)[]>,
@@ -53,8 +51,9 @@ vi.mock('electron', () => {
     app: {
       quit: mockAppQuit,
       getVersion: mockAppGetVersion,
-      setAboutPanelOptions: mockAppSetAboutPanelOptions,
-      showAboutPanel: mockAppShowAboutPanel,
+    },
+    dialog: {
+      showMessageBox: mockDialogShowMessageBox,
     },
     nativeTheme: {
       get shouldUseDarkColors() { return nativeThemeState.dark; },
@@ -186,18 +185,21 @@ describe('main/tray-manager', () => {
       expect(mockShellOpenPath).toHaveBeenCalledWith('C:\\Users\\test\\config.json');
     });
 
-    it('About QuakeShell shows about panel with version', () => {
+    it('About QuakeShell shows a version dialog', () => {
       const opts = defaultOptions();
       createTray(opts);
 
       const item = findMenuItem('About QuakeShell');
       item!.click!();
 
-      expect(mockAppSetAboutPanelOptions).toHaveBeenCalledWith({
-        applicationName: 'QuakeShell',
-        applicationVersion: '1.2.3',
+      expect(mockDialogShowMessageBox).toHaveBeenCalledWith({
+        type: 'info',
+        title: 'About QuakeShell',
+        message: 'QuakeShell',
+        detail: 'Version 1.2.3',
+        buttons: ['OK'],
+        noLink: true,
       });
-      expect(mockAppShowAboutPanel).toHaveBeenCalled();
     });
 
     it('Quit calls onQuit callback (graceful shutdown)', () => {
