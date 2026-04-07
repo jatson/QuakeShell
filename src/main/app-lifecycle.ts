@@ -287,11 +287,15 @@ export function gracefulShutdown(): void {
   // 1. Kill PTY process(es) — destroy all tab PTYs first, then legacy PTY
   try {
     tabManager.destroyAllTabs();
-    terminalManager.destroy();
-    logger.info('PTY process(es) terminated');
   } catch (error) {
-    logger.error('Failed to terminate PTY:', error);
+    logger.error('Failed to terminate tab PTYs:', error);
   }
+  try {
+    terminalManager.destroy();
+  } catch (error) {
+    logger.error('Failed to terminate legacy PTY:', error);
+  }
+  logger.info('PTY process(es) terminated');
 
   // 2. Set quitting flag so window close interceptor allows it
   windowManager.setQuitting(true);

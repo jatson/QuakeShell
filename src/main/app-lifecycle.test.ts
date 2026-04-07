@@ -470,6 +470,12 @@ describe('main/app-lifecycle', () => {
       expect(mockQuit).toHaveBeenCalled();
     });
 
+    it('still calls terminalManager.destroy() when destroyAllTabs() throws', () => {
+      mockDestroyAllTabs.mockImplementationOnce(() => { throw new Error('tabs already dead'); });
+      gracefulShutdown();
+      expect(mockTerminalDestroy).toHaveBeenCalled();
+    });
+
     it('sets up a force-quit timeout safeguard', () => {
       gracefulShutdown();
 
