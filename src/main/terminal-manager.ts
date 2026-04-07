@@ -1,5 +1,6 @@
 import * as nodePty from 'node-pty';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import log from 'electron-log/main';
 
 const logger = log.scope('terminal-manager');
@@ -93,12 +94,96 @@ function isWslShell(shellConfig: string): boolean {
   return shellConfig === 'wsl';
 }
 
+function copyStringEnv(
+  env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
+): Record<string, string> {
+  const copiedEnv: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === 'string') {
+      copiedEnv[key] = value;
+    }
+  }
+
+  return copiedEnv;
+}
+
+function normalizeWindowsPathSegment(segment: string): string {
+  return path.win32.normalize(segment).replace(/[\\/]+$/, '').toLowerCase();
+}
+
+function dedupeWindowsPathSegments(segments: string[]): string[] {
+  const seen = new Set<string>();
+  const dedupedSegments: string[] = [];
+
+  for (const segment of segments) {
+    const trimmedSegment = segment.trim();
+    if (!trimmedSegment) {
+      continue;
+    }
+
+    const normalizedSegment = normalizeWindowsPathSegment(trimmedSegment);
+    if (seen.has(normalizedSegment)) {
+      continue;
+    }
+
+    seen.add(normalizedSegment);
+    dedupedSegments.push(trimmedSegment);
+  }
+
+  return dedupedSegments;
+}
+
+export function normalizeWindowsSpawnEnv(
+  env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
+): Record<string, string> {
+  const normalizedEnv = copyStringEnv(env);
+
+  for (const key of Object.keys(normalizedEnv)) {
+    if (key.toLowerCase() === 'path') {
+      delete normalizedEnv[key];
+    }
+  }
+
+  const mergedPathSegments = Object.entries(env)
+    .filter(([key, value]) => key.toLowerCase() === 'path' && typeof value === 'string')
+    .sort(([leftKey], [rightKey]) => {
+      if (leftKey === 'Path') return -1;
+      if (rightKey === 'Path') return 1;
+      if (leftKey === 'PATH') return -1;
+      if (rightKey === 'PATH') return 1;
+      return leftKey.localeCompare(rightKey);
+    })
+    .flatMap(([, value]) => value.split(path.delimiter));
+
+  const voltaHome = env.VOLTA_HOME?.trim();
+  if (voltaHome) {
+    mergedPathSegments.unshift(path.win32.join(voltaHome, 'bin'));
+  }
+
+  const dedupedPathSegments = dedupeWindowsPathSegments(mergedPathSegments);
+  if (dedupedPathSegments.length > 0) {
+    normalizedEnv.Path = dedupedPathSegments.join(path.delimiter);
+  }
+
+  const systemRoot = normalizedEnv.SystemRoot ?? env.SystemRoot ?? env.windir ?? env.WINDIR;
+  if (typeof systemRoot === 'string' && systemRoot.trim() !== '') {
+    normalizedEnv.SystemRoot = systemRoot.trim();
+  }
+
+  return normalizedEnv;
+}
+
 /** Build environment variables for spawn, adding WSL-specific vars when needed */
 function buildSpawnEnv(shellConfig: string): Record<string, string> {
-  const env = process.env as Record<string, string>;
+  const env = process.platform === 'win32'
+    ? normalizeWindowsSpawnEnv(process.env as Record<string, string | undefined>)
+    : copyStringEnv(process.env as Record<string, string | undefined>);
+
   if (isWslShell(shellConfig)) {
     return { ...env, COLORTERM: 'truecolor', TERM: 'xterm-256color' };
   }
+
   return env;
 }
 
