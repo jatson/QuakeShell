@@ -160,11 +160,21 @@ describe('main/theme-engine', () => {
     fs.rmSync(userThemesDir, { recursive: true, force: true });
   });
 
-  it('loads the three bundled themes in development mode', () => {
+  it('loads the core bundled themes and shipped theme packs in development mode', () => {
     const themes = engine.loadBundledThemes();
 
-    expect(themes).toHaveLength(3);
-    expect(themes.map((theme) => theme.id).sort()).toEqual(['retro-green', 'solarized-dark', 'tokyo-night']);
+    expect(themes).toHaveLength(15);
+    expect(themes.slice(0, 3).map((theme) => theme.id).sort()).toEqual(['retro-green', 'solarized-dark', 'tokyo-night']);
+    expect(themes.some((theme) => theme.id === 'midnight-mint')).toBe(true);
+    expect(themes.some((theme) => theme.id === 'paper-mint')).toBe(true);
+  });
+
+  it('activates a shipped theme pack theme when configured', () => {
+    const config = createConfigStore('midnight-mint');
+
+    engine.init(config.store as never);
+
+    expect(engine.getActiveTheme().id).toBe('midnight-mint');
   });
 
   it('initializes the active theme from config when the id is valid', () => {
@@ -200,13 +210,46 @@ describe('main/theme-engine', () => {
     engine.loadCommunityThemes();
 
     const themes = engine.listThemes();
-    expect(themes).toHaveLength(4);
+    expect(themes).toHaveLength(16);
     expect(themes.slice(0, 3).map((theme) => theme.id).sort()).toEqual([
       'retro-green',
       'solarized-dark',
       'tokyo-night',
     ]);
-    expect(themes[3]?.id).toBe('custom-blue');
+    expect(themes.slice(0, -1).some((theme) => theme.id === 'midnight-mint')).toBe(true);
+    expect(themes.at(-1)?.id).toBe('custom-blue');
+  });
+
+  it('skips duplicate shipped theme ids from later shipped files', () => {
+    const bundledDir = fs.mkdtempSync(path.join(os.tmpdir(), 'quakeshell-duplicate-bundled-themes-'));
+
+    try {
+      fs.copyFileSync(path.join(path.resolve(process.cwd(), 'themes'), 'tokyo-night.json'), path.join(bundledDir, 'tokyo-night.json'));
+      fs.copyFileSync(path.join(path.resolve(process.cwd(), 'themes'), 'retro-green.json'), path.join(bundledDir, 'retro-green.json'));
+      fs.copyFileSync(path.join(path.resolve(process.cwd(), 'themes'), 'solarized-dark.json'), path.join(bundledDir, 'solarized-dark.json'));
+      fs.writeFileSync(
+        path.join(bundledDir, 'theme-boundle-dark.json'),
+        JSON.stringify([{ ...communityTheme, id: 'tokyo-night', name: 'Duplicate Tokyo Night' }]),
+        'utf8',
+      );
+      fs.writeFileSync(
+        path.join(bundledDir, 'theme-boundle-light.json'),
+        JSON.stringify([{ ...communityTheme, id: 'paper-mint', name: 'Paper Mint' }]),
+        'utf8',
+      );
+
+      const customEngine = new TestThemeEngine(bundledDir, userThemesDir);
+      const themes = customEngine.loadBundledThemes();
+
+      expect(themes.find((theme) => theme.id === 'tokyo-night')?.name).toBe('Tokyo Night');
+      expect(logger.warn).toHaveBeenCalledWith(
+        "Duplicate bundled theme 'tokyo-night' in theme-boundle-dark.json; skipping",
+      );
+
+      customEngine.destroy();
+    } finally {
+      fs.rmSync(bundledDir, { recursive: true, force: true });
+    }
   });
 
   it('broadcasts theme:changed when the config store emits a theme change', () => {
@@ -231,6 +274,53 @@ describe('main/theme-engine', () => {
     engine.loadCommunityThemeFile(communityPath);
 
     expect(engine.listThemes().find((theme) => theme.id === 'custom-blue')).toEqual(communityTheme);
+  });
+
+  it('skips a community theme that conflicts with a shipped theme pack theme', () => {
+    engine.loadBundledThemes();
+    const communityPath = path.join(userThemesDir, 'midnight-mint.json');
+    fs.writeFileSync(
+      communityPath,
+      JSON.stringify({
+        ...communityTheme,
+        id: 'midnight-mint',
+        name: 'Community Midnight Mint',
+      }),
+      'utf8',
+    );
+
+    engine.loadCommunityThemeFile(communityPath);
+
+    expect(engine.listThemes().find((theme) => theme.id === 'midnight-mint')?.name).toBe('Midnight Mint');
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Community theme 'midnight-mint' conflicts with a bundled theme; skipping",
+    );
+  });
+
+  it('continues loading other shipped themes when one shipped pack file is malformed', () => {
+    const bundledDir = fs.mkdtempSync(path.join(os.tmpdir(), 'quakeshell-bundled-themes-'));
+
+    try {
+      for (const file of ['tokyo-night.json', 'retro-green.json', 'solarized-dark.json', 'theme-boundle-light.json']) {
+        fs.copyFileSync(path.join(path.resolve(process.cwd(), 'themes'), file), path.join(bundledDir, file));
+      }
+
+      fs.writeFileSync(path.join(bundledDir, 'theme-boundle-dark.json'), '{ invalid json', 'utf8');
+
+      const customEngine = new TestThemeEngine(bundledDir, userThemesDir);
+      const themes = customEngine.loadBundledThemes();
+
+      expect(themes.some((theme) => theme.id === 'paper-mint')).toBe(true);
+      expect(themes.some((theme) => theme.id === 'midnight-mint')).toBe(false);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Failed to load bundled theme file theme-boundle-dark.json:',
+        expect.any(SyntaxError),
+      );
+
+      customEngine.destroy();
+    } finally {
+      fs.rmSync(bundledDir, { recursive: true, force: true });
+    }
   });
 
   it('loads all community themes from a single theme bundle file', () => {

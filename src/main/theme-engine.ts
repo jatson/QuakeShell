@@ -10,6 +10,16 @@ const logger = log.scope('theme-engine');
 const FALLBACK_THEME_ID = 'tokyo-night';
 const THEME_RELOAD_DEBOUNCE_MS = 200;
 const THEME_PARSE_RETRY_LIMIT = 3;
+const BUNDLED_THEME_FILES = [
+  'tokyo-night.json',
+  'retro-green.json',
+  'solarized-dark.json',
+] as const;
+// Keep the existing on-disk 'theme-boundle-*.json' filenames for shipped assets.
+const SHIPPED_THEME_PACK_FILES = [
+  'theme-boundle-dark.json',
+  'theme-boundle-light.json',
+] as const;
 
 const REQUIRED_XTERM_KEYS = [
   'background',
@@ -69,24 +79,34 @@ export class ThemeEngine {
     this.bundledThemes.clear();
     const dir = this.getThemesDir();
 
-    const files = fs.readdirSync(dir).filter((file) => file.endsWith('.json'));
-    for (const file of files) {
-      const filePath = path.join(dir, file);
+    for (const file of BUNDLED_THEME_FILES) {
+      this.loadBundledThemeFile(path.join(dir, file), file);
+    }
 
-      try {
-        const raw = fs.readFileSync(filePath, 'utf-8');
-        const parsed = JSON.parse(raw);
-        const safeThemes = this.parseThemeFilePayload(parsed, filePath);
-
-        for (const safeTheme of safeThemes) {
-          this.bundledThemes.set(safeTheme.id, safeTheme);
-        }
-      } catch (error) {
-        logger.warn(`Failed to load bundled theme file ${file}:`, error);
-      }
+    for (const file of SHIPPED_THEME_PACK_FILES) {
+      this.loadBundledThemeFile(path.join(dir, file), file);
     }
 
     return Array.from(this.bundledThemes.values());
+  }
+
+  private loadBundledThemeFile(filePath: string, fileLabel = path.basename(filePath)): void {
+    try {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      const safeThemes = this.parseThemeFilePayload(parsed, filePath);
+
+      for (const safeTheme of safeThemes) {
+        if (this.bundledThemes.has(safeTheme.id)) {
+          logger.warn(`Duplicate bundled theme '${safeTheme.id}' in ${fileLabel}; skipping`);
+          continue;
+        }
+
+        this.bundledThemes.set(safeTheme.id, safeTheme);
+      }
+    } catch (error) {
+      logger.warn(`Failed to load bundled theme file ${fileLabel}:`, error);
+    }
   }
 
   loadCommunityThemes(): void {
