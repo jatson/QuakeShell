@@ -78,6 +78,24 @@ Advanced installer overrides:
 - `QUAKESHELL_ASSET_URL` or `QUAKESHELL_RELEASE_BASE_URL` — point the installer at a custom release mirror
 - `QUAKESHELL_INSTALL_ROOT` — change the cache/install root from `%USERPROFILE%\.quakeshell\npm`
 
+To remove the npm-managed QuakeShell payload and cached downloads:
+
+```bash
+quakeshell uninstall
+```
+
+That command removes the wrapper-managed `versions` and `tmp` directories under `%USERPROFILE%\.quakeshell\npm` or your custom `QUAKESHELL_INSTALL_ROOT`, while preserving `%APPDATA%\QuakeShell` user settings and themes. After cleanup, remove the wrapper command itself with:
+
+```bash
+npm uninstall -g quakeshell
+```
+
+If you installed into a non-default cache root, pass it explicitly:
+
+```bash
+quakeshell uninstall --install-root C:\path\to\quakeshell\npm
+```
+
 > npm and GitHub Releases are the active delivery channels today. Scoop and Winget publishing are the main remaining distribution tasks.
 
 ---

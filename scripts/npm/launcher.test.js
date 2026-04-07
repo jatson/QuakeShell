@@ -11,8 +11,10 @@ const {
 const {
   createLaunchError,
   isSpawnUnknownError,
+  isUninstallCommand,
   launch,
   resolveExecutablePath,
+  runCli,
 } = require('./launcher');
 
 function createTempDirectory(prefix = 'quakeshell-launcher-') {
@@ -356,5 +358,27 @@ describe('scripts/npm/launcher', () => {
       powerShellRunner,
       spawnImpl,
     })).resolves.toMatchObject({ executablePath, args: [] });
+  });
+
+  it('routes the uninstall subcommand to the cleanup handler', async () => {
+    const launchImpl = vi.fn();
+    const uninstallImpl = vi.fn().mockResolvedValue({ status: 'removed' });
+
+    await expect(runCli({
+      args: ['uninstall', '--dry-run'],
+      launchImpl,
+      uninstallImpl,
+    })).resolves.toEqual({ status: 'removed' });
+
+    expect(uninstallImpl).toHaveBeenCalledWith(expect.objectContaining({
+      args: ['--dry-run'],
+    }));
+    expect(launchImpl).not.toHaveBeenCalled();
+  });
+
+  it('only treats the first argument as the uninstall subcommand', () => {
+    expect(isUninstallCommand(['uninstall'])).toBe(true);
+    expect(isUninstallCommand(['--cwd', 'C:\\Work', 'uninstall'])).toBe(false);
+    expect(isUninstallCommand([])).toBe(false);
   });
 });

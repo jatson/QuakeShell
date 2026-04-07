@@ -5,6 +5,7 @@ const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
 const { ensureExecutableVersion } = require('./postinstall');
+const { runUninstallCommand } = require('./uninstall');
 
 const {
   MANUAL_BINARY_ENV,
@@ -20,6 +21,8 @@ const {
   resolveRuntimeTarget,
   resolvePackageRoot,
 } = require('./distribution');
+
+const UNINSTALL_COMMAND = 'uninstall';
 
 function isSpawnUnknownError(error) {
   return Boolean(
@@ -181,8 +184,30 @@ function launch(options = {}) {
   });
 }
 
+function isUninstallCommand(args) {
+  return Array.isArray(args) && args[0] === UNINSTALL_COMMAND;
+}
+
+function runCli(options = {}) {
+  const args = options.args || process.argv.slice(2);
+
+  if (isUninstallCommand(args)) {
+    const uninstallImpl = options.uninstallImpl || runUninstallCommand;
+    return Promise.resolve(uninstallImpl({
+      ...options,
+      args: args.slice(1),
+    }));
+  }
+
+  const launchImpl = options.launchImpl || launch;
+  return launchImpl({
+    ...options,
+    args,
+  });
+}
+
 if (require.main === module) {
-  launch().catch((error) => {
+  runCli().catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[quakeshell] ${message}`);
     process.exitCode = 1;
@@ -192,6 +217,8 @@ if (require.main === module) {
 module.exports = {
   createLaunchError,
   isSpawnUnknownError,
+  isUninstallCommand,
   launch,
   resolveExecutablePath,
+  runCli,
 };
