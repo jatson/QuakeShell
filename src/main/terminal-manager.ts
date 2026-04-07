@@ -238,11 +238,22 @@ function getCleanWindowsPath(
   return resolvedRegistryPath;
 }
 
-// ─── Leaked npm environment cleanup ───
+// ─── Leaked npm / Volta environment cleanup ───
 
 /** Env-var prefixes that leak from npm lifecycle scripts and must not persist into child terminals. */
 const LEAKED_ENV_PREFIXES = ['npm_lifecycle_', 'npm_package_', 'npm_config_'];
-const LEAKED_ENV_EXACT = new Set(['npm_execpath', 'npm_node_execpath']);
+/**
+ * Exact env-var names that leak from npm/Volta runtime and break child shells:
+ * - npm_execpath / npm_node_execpath: npm lifecycle leftovers
+ * - _volta_tool_recursion: tells Volta shims to bypass tool resolution, causing
+ *   "npm is not recognized" when no standalone npm exists on the system PATH
+ * - node_path: points to Volta internal shared tools; confuses Node module resolution
+ */
+const LEAKED_ENV_EXACT = new Set([
+  'npm_execpath', 'npm_node_execpath',
+  '_volta_tool_recursion',
+  'node_path',
+]);
 
 function isLeakedNpmEnvKey(key: string): boolean {
   const lowered = key.toLowerCase();

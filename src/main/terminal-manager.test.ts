@@ -432,6 +432,8 @@ describe('main/terminal-manager', () => {
         npm_config_prefix: 'C:\\Users\\test\\AppData\\Roaming\\npm',
         npm_execpath: 'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin\\npm-cli.js',
         npm_node_execpath: 'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\node\\22.0.0\\node.exe',
+        _VOLTA_TOOL_RECURSION: '1',
+        NODE_PATH: 'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\shared;',
         USERPROFILE: 'C:\\Users\\test',
       });
 
@@ -442,6 +444,8 @@ describe('main/terminal-manager', () => {
       expect(env).not.toHaveProperty('npm_config_prefix');
       expect(env).not.toHaveProperty('npm_execpath');
       expect(env).not.toHaveProperty('npm_node_execpath');
+      expect(env).not.toHaveProperty('_VOLTA_TOOL_RECURSION');
+      expect(env).not.toHaveProperty('NODE_PATH');
       expect(env.USERPROFILE).toBe('C:\\Users\\test');
     });
 
