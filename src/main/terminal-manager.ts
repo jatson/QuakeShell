@@ -188,11 +188,15 @@ function readWindowsRegistryValue(registryKey: string, valueName: string): strin
       windowsHide: true,
     });
     if (result.status !== 0 || typeof result.stdout !== 'string') {
+      logger.warn('[env-diag] reg query failed for %s\\%s  status=%s', registryKey, valueName, result.status);
       return null;
     }
     const match = result.stdout.match(/^\s+\S+\s+REG_(?:EXPAND_)?SZ\s+(.+?)$/m);
-    return match ? match[1].trim() : null;
-  } catch {
+    const value = match ? match[1].trim() : null;
+    logger.info('[env-diag] reg query %s\\%s  → %s chars: %s', registryKey, valueName, value?.length ?? 0, value);
+    return value;
+  } catch (err) {
+    logger.error('[env-diag] reg query threw for %s\\%s:', registryKey, valueName, err);
     return null;
   }
 }
@@ -211,13 +215,16 @@ function getCleanWindowsPath(
   env: Record<string, string | undefined>,
 ): string | null {
   if (resolvedRegistryPath !== undefined) {
+    logger.info('[env-diag] getCleanWindowsPath cache hit  → %s', resolvedRegistryPath === null ? 'null (fallback)' : `${resolvedRegistryPath.length} chars`);
     return resolvedRegistryPath;
   }
 
+  logger.info('[env-diag] getCleanWindowsPath: reading registry…');
   const systemPath = readWindowsRegistryValue(SYSTEM_PATH_REGISTRY_KEY, 'Path');
   const userPath = readWindowsRegistryValue(USER_PATH_REGISTRY_KEY, 'Path');
 
   if (!systemPath && !userPath) {
+    logger.warn('[env-diag] getCleanWindowsPath: both registry reads returned null → using fallback');
     resolvedRegistryPath = null;
     return null;
   }
@@ -227,6 +234,7 @@ function getCleanWindowsPath(
   if (userPath) parts.push(expandWindowsEnvVars(userPath, env));
 
   resolvedRegistryPath = parts.join(WINDOWS_PATH_DELIMITER);
+  logger.info('[env-diag] getCleanWindowsPath result (%d chars):\n%s', resolvedRegistryPath.length, resolvedRegistryPath);
   return resolvedRegistryPath;
 }
 
@@ -266,8 +274,10 @@ export function normalizeWindowsSpawnEnv(
 
   let pathSegments: string[];
   if (cleanPath) {
+    logger.info('[env-diag] normalizeWindowsSpawnEnv: using REGISTRY path (%d segments)', cleanPath.split(WINDOWS_PATH_DELIMITER).length);
     pathSegments = cleanPath.split(WINDOWS_PATH_DELIMITER);
   } else {
+    logger.info('[env-diag] normalizeWindowsSpawnEnv: using FALLBACK env-based path');
     pathSegments = Object.entries(env)
       .filter(([key, value]) => key.toLowerCase() === 'path' && typeof value === 'string')
       .sort(([leftKey], [rightKey]) => {
@@ -290,6 +300,11 @@ export function normalizeWindowsSpawnEnv(
   if (dedupedPathSegments.length > 0) {
     normalizedEnv.Path = dedupedPathSegments.join(WINDOWS_PATH_DELIMITER);
   }
+
+  logger.info('[env-diag] normalizeWindowsSpawnEnv final Path (%d segments):\n%s',
+    dedupedPathSegments.length,
+    dedupedPathSegments.map((s, i) => `  [${i}] ${s}`).join('\n'),
+  );
 
   const systemRoot = normalizedEnv.SystemRoot ?? env.SystemRoot ?? env.windir ?? env.WINDIR;
   if (typeof systemRoot === 'string' && systemRoot.trim() !== '') {
