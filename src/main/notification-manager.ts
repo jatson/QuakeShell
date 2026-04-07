@@ -16,6 +16,7 @@ const RELEASES_URL = 'https://github.com/jatson/QuakeShell/releases';
 const NPM_PACKAGE_NAME = 'quakeshell';
 const WINDOWS_PLATFORM = 'win32';
 const WINDOWS_ARCH = 'x64';
+const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 let pendingUpdateVersion: string | null = null;
 let installingUpdateVersion: string | null = null;
@@ -124,8 +125,31 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function runWindowsCommand(command: string): Promise<void> {
-  const child = spawn('cmd.exe', ['/d', '/s', '/c', command], {
+function parseSemver(version: string): [number, number, number] | null {
+  if (!SEMVER_PATTERN.test(version)) {
+    return null;
+  }
+
+  const [coreVersion] = version.split(/[+-]/, 1);
+  const [major, minor, patch] = coreVersion.split('.', 3).map(Number);
+  return [major, minor, patch];
+}
+
+function validateRegistryVersion(version: string | null): string {
+  if (!version || parseSemver(version) === null) {
+    throw new Error('Invalid response: invalid version field');
+  }
+
+  return version;
+}
+
+function runNpmInstall(version: string): Promise<void> {
+  if (parseSemver(version) === null) {
+    return Promise.reject(new Error(`Refusing to install invalid version: ${version}`));
+  }
+
+  const npmExecutable = process.platform === WINDOWS_PLATFORM ? 'npm.cmd' : 'npm';
+  const child = spawn(npmExecutable, ['install', '-g', `${NPM_PACKAGE_NAME}@${version}`], {
     stdio: 'ignore',
     windowsHide: true,
   });
@@ -138,7 +162,7 @@ function runWindowsCommand(command: string): Promise<void> {
         return;
       }
 
-      reject(new Error(`Command failed with exit code ${code ?? 'unknown'}: ${command}`));
+      reject(new Error(`npm install failed with exit code ${code ?? 'unknown'} for ${NPM_PACKAGE_NAME}@${version}`));
     });
   });
 }
@@ -198,28 +222,30 @@ async function restartIntoInstalledVersion(version: string): Promise<void> {
 }
 
 async function installAvailableUpdate(latestVersion: string): Promise<void> {
-  if (pendingUpdateVersion === latestVersion) {
-    notifyUpdateReady(latestVersion);
+  const validatedVersion = validateRegistryVersion(latestVersion);
+
+  if (pendingUpdateVersion === validatedVersion) {
+    notifyUpdateReady(validatedVersion);
     return;
   }
 
-  if (updateInstallPromise && installingUpdateVersion === latestVersion) {
+  if (updateInstallPromise && installingUpdateVersion === validatedVersion) {
     return updateInstallPromise;
   }
 
-  installingUpdateVersion = latestVersion;
+  installingUpdateVersion = validatedVersion;
   send({
     title: APP_NAME,
-    body: `Installing ${APP_NAME} v${latestVersion}...`,
-    onClick: () => {},
+    body: `Installing ${APP_NAME} v${validatedVersion}...`,
+    onClick: () => undefined,
     bypassSuppression: true,
   });
 
-  updateInstallPromise = runWindowsCommand(`npm install -g ${NPM_PACKAGE_NAME}@${latestVersion}`)
+  updateInstallPromise = runNpmInstall(validatedVersion)
     .then(() => {
-      pendingUpdateVersion = latestVersion;
-      updateLogger.info(`Update installed: ${latestVersion}`);
-      notifyUpdateReady(latestVersion);
+      pendingUpdateVersion = validatedVersion;
+      updateLogger.info(`Update installed: ${validatedVersion}`);
+      notifyUpdateReady(validatedVersion);
     })
     .catch((error) => {
       pendingUpdateVersion = null;
@@ -227,9 +253,9 @@ async function installAvailableUpdate(latestVersion: string): Promise<void> {
       updateLogger.warn(`Automatic update failed: ${message}`);
       send({
         title: APP_NAME,
-        body: `Automatic update failed. Click to open ${APP_NAME} v${latestVersion}.`,
+        body: `Automatic update failed. Click to open ${APP_NAME} v${validatedVersion}.`,
         onClick: () => {
-          void shell.openExternal(getReleasePageUrl(latestVersion));
+          void shell.openExternal(getReleasePageUrl(validatedVersion));
         },
         bypassSuppression: true,
       });
@@ -287,8 +313,12 @@ export function send(options: NotificationOptions): void {
  * Returns true if b is newer than a.
  */
 function isNewerVersion(current: string, latest: string): boolean {
-  const c = current.split('.').map(Number);
-  const l = latest.split('.').map(Number);
+  const c = parseSemver(current);
+  const l = parseSemver(latest);
+  if (!c || !l) {
+    return false;
+  }
+
   for (let i = 0; i < 3; i++) {
     const cv = c[i] || 0;
     const lv = l[i] || 0;
@@ -317,11 +347,7 @@ export async function checkForUpdates(manual = false): Promise<UpdateCheckResult
     }
 
     const data = await response.json() as { version?: string };
-    const latestVersion = data.version ?? null;
-
-    if (!latestVersion) {
-      throw new Error('Invalid response: no version field');
-    }
+    const latestVersion = validateRegistryVersion(data.version ?? null);
 
     const updateAvailable = isNewerVersion(currentVersion, latestVersion);
 

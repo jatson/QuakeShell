@@ -317,8 +317,8 @@ describe('main/notification-manager', () => {
 
       expect(mockSpawn).toHaveBeenNthCalledWith(
         1,
-        'cmd.exe',
-        ['/d', '/s', '/c', 'npm install -g quakeshell@2.0.0'],
+        'npm.cmd',
+        ['install', '-g', 'quakeshell@2.0.0'],
         expect.objectContaining({
           stdio: 'ignore',
           windowsHide: true,
@@ -367,6 +367,31 @@ describe('main/notification-manager', () => {
       await vi.waitFor(() => {
         expect(restartHandler).toHaveBeenCalled();
       });
+    });
+
+    it('rejects invalid registry versions before notifying or spawning npm', async () => {
+      const installRoot = createTempDirectory();
+      temporaryPaths.push(installRoot);
+      vi.stubEnv('QUAKESHELL_INSTALL_ROOT', installRoot);
+      process.execPath = path.join(
+        installRoot,
+        'versions',
+        '1.0.0-win32-x64',
+        'quakeshell-win32-x64',
+        'quakeshell.exe',
+      );
+
+      fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ version: '2.0.0 & calc.exe' }),
+      } as Response);
+
+      const result = await checkForUpdates(false);
+
+      expect(result.updateAvailable).toBe(false);
+      expect(result.error).toBe('Invalid response: invalid version field');
+      expect(MockNotification).not.toHaveBeenCalled();
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
     it('does not notify on periodic check when same version', async () => {
