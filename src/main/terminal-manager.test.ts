@@ -352,7 +352,7 @@ describe('main/terminal-manager', () => {
       expect(_normalizeWindowsPathSegmentForComparison('\\\\server\\share\\')).toBe('\\\\server\\share\\');
     });
 
-    it('collapses duplicate PATH key variants into a single Path entry', () => {
+    it('collapses duplicate PATH key variants into a single Path entry and strips Volta tool-image paths', () => {
       const env = normalizeWindowsSpawnEnv({
         PATH: [
           'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin',
@@ -368,11 +368,11 @@ describe('main/terminal-manager', () => {
       const pathSegments = env.Path.split(path.win32.delimiter);
       expect(Object.keys(env).filter((key) => key.toLowerCase() === 'path')).toEqual(['Path']);
       expect(pathSegments[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
-      expect(pathSegments).toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
       expect(pathSegments).toContain('C:\\Windows\\System32');
     });
 
-    it('prepends the Volta shim directory ahead of tool image bins', () => {
+    it('prepends the Volta shim directory and strips tool-image bins', () => {
       const env = normalizeWindowsSpawnEnv({
         Path: [
           'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin',
@@ -382,10 +382,13 @@ describe('main/terminal-manager', () => {
         SystemRoot: 'C:\\Windows',
       });
 
-      expect(env.Path.split(path.win32.delimiter)[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
+      const pathSegments = env.Path.split(path.win32.delimiter);
+      expect(pathSegments[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
+      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+      expect(pathSegments).toContain('C:\\Windows\\System32');
     });
 
-    it('derives the Volta shim directory from tool image bins when VOLTA_HOME is missing', () => {
+    it('derives the Volta shim directory from tool image bins when VOLTA_HOME is missing and strips tool-image entries', () => {
       const env = normalizeWindowsSpawnEnv({
         Path: [
           'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin',
@@ -396,7 +399,8 @@ describe('main/terminal-manager', () => {
 
       const pathSegments = env.Path.split(path.win32.delimiter);
       expect(pathSegments[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
-      expect(pathSegments).toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+      expect(pathSegments).toContain('C:\\Windows\\System32');
     });
 
     it('hydrates SystemRoot from windir when PowerShell prerequisites are missing', () => {
@@ -406,6 +410,51 @@ describe('main/terminal-manager', () => {
       });
 
       expect(env.SystemRoot).toBe('C:\\Windows');
+    });
+
+    it('strips npm lifecycle and config vars leaked from the parent process', () => {
+      const env = normalizeWindowsSpawnEnv({
+        Path: 'C:\\Windows\\System32',
+        SystemRoot: 'C:\\Windows',
+        npm_lifecycle_event: 'postinstall',
+        npm_lifecycle_script: 'node scripts/npm/postinstall.js',
+        npm_package_name: 'quakeshell',
+        npm_package_version: '1.0.8',
+        npm_config_prefix: 'C:\\Users\\test\\AppData\\Roaming\\npm',
+        npm_execpath: 'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin\\npm-cli.js',
+        npm_node_execpath: 'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\node\\22.0.0\\node.exe',
+        USERPROFILE: 'C:\\Users\\test',
+      });
+
+      expect(env).not.toHaveProperty('npm_lifecycle_event');
+      expect(env).not.toHaveProperty('npm_lifecycle_script');
+      expect(env).not.toHaveProperty('npm_package_name');
+      expect(env).not.toHaveProperty('npm_package_version');
+      expect(env).not.toHaveProperty('npm_config_prefix');
+      expect(env).not.toHaveProperty('npm_execpath');
+      expect(env).not.toHaveProperty('npm_node_execpath');
+      expect(env.USERPROFILE).toBe('C:\\Users\\test');
+    });
+
+    it('strips multiple Volta tool-image paths including node and npm', () => {
+      const env = normalizeWindowsSpawnEnv({
+        Path: [
+          'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\node\\22.0.0',
+          'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin',
+          'C:\\Users\\test\\AppData\\Local\\Volta\\bin',
+          'C:\\Windows\\System32',
+          'C:\\Program Files\\Git\\cmd',
+        ].join(path.win32.delimiter),
+        VOLTA_HOME: 'C:\\Users\\test\\AppData\\Local\\Volta',
+        SystemRoot: 'C:\\Windows',
+      });
+
+      const pathSegments = env.Path.split(path.win32.delimiter);
+      expect(pathSegments[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
+      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\node\\22.0.0');
+      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+      expect(pathSegments).toContain('C:\\Windows\\System32');
+      expect(pathSegments).toContain('C:\\Program Files\\Git\\cmd');
     });
   });
 

@@ -145,6 +145,12 @@ function dedupeWindowsPathSegments(segments: string[]): string[] {
   return dedupedSegments;
 }
 
+const VOLTA_TOOL_IMAGE_MARKER = `${path.win32.sep}tools${path.win32.sep}image${path.win32.sep}`.toLowerCase();
+
+function isVoltaToolImagePath(segment: string): boolean {
+  return path.win32.normalize(segment).toLowerCase().includes(VOLTA_TOOL_IMAGE_MARKER);
+}
+
 function deriveVoltaHomeFromPathSegments(segments: string[]): string | null {
   for (const segment of segments) {
     const trimmedSegment = segment.trim();
@@ -153,9 +159,8 @@ function deriveVoltaHomeFromPathSegments(segments: string[]): string | null {
     }
 
     const normalizedSegment = path.win32.normalize(trimmedSegment);
-    const marker = `${path.win32.sep}tools${path.win32.sep}image${path.win32.sep}`.toLowerCase();
     const loweredSegment = normalizedSegment.toLowerCase();
-    const markerIndex = loweredSegment.indexOf(marker);
+    const markerIndex = loweredSegment.indexOf(VOLTA_TOOL_IMAGE_MARKER);
 
     if (markerIndex === -1) {
       continue;
@@ -170,10 +175,27 @@ function deriveVoltaHomeFromPathSegments(segments: string[]): string | null {
   return null;
 }
 
+/** Env-var prefixes that leak from npm lifecycle scripts and must not persist into child terminals. */
+const LEAKED_ENV_PREFIXES = ['npm_lifecycle_', 'npm_package_', 'npm_config_'];
+const LEAKED_ENV_EXACT = new Set(['npm_execpath', 'npm_node_execpath']);
+
+function isLeakedNpmEnvKey(key: string): boolean {
+  const lowered = key.toLowerCase();
+  return LEAKED_ENV_EXACT.has(lowered)
+    || LEAKED_ENV_PREFIXES.some((prefix) => lowered.startsWith(prefix));
+}
+
 export function normalizeWindowsSpawnEnv(
   env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
 ): Record<string, string> {
   const normalizedEnv = copyStringEnv(env);
+
+  // Strip env vars leaked by npm lifecycle / postinstall
+  for (const key of Object.keys(normalizedEnv)) {
+    if (isLeakedNpmEnvKey(key)) {
+      delete normalizedEnv[key];
+    }
+  }
 
   for (const key of Object.keys(normalizedEnv)) {
     if (key.toLowerCase() === 'path') {
@@ -192,12 +214,19 @@ export function normalizeWindowsSpawnEnv(
     })
     .flatMap(([, value]) => (value ? value.split(WINDOWS_PATH_DELIMITER) : []));
 
+  // Derive Volta home BEFORE stripping tool-image paths so derivation still works
   const voltaHome = env.VOLTA_HOME?.trim() || deriveVoltaHomeFromPathSegments(mergedPathSegments);
+
+  // Strip Volta internal tool-image paths — shims re-inject them at runtime
+  const cleanedPathSegments = mergedPathSegments.filter(
+    (segment) => !isVoltaToolImagePath(segment),
+  );
+
   if (voltaHome) {
-    mergedPathSegments.unshift(path.win32.join(voltaHome, 'bin'));
+    cleanedPathSegments.unshift(path.win32.join(voltaHome, 'bin'));
   }
 
-  const dedupedPathSegments = dedupeWindowsPathSegments(mergedPathSegments);
+  const dedupedPathSegments = dedupeWindowsPathSegments(cleanedPathSegments);
   if (dedupedPathSegments.length > 0) {
     normalizedEnv.Path = dedupedPathSegments.join(WINDOWS_PATH_DELIMITER);
   }
