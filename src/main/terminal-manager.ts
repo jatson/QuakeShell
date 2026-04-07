@@ -147,10 +147,6 @@ function dedupeWindowsPathSegments(segments: string[]): string[] {
 
 const VOLTA_TOOL_IMAGE_MARKER = `${path.win32.sep}tools${path.win32.sep}image${path.win32.sep}`.toLowerCase();
 
-function isVoltaToolImagePath(segment: string): boolean {
-  return path.win32.normalize(segment).toLowerCase().includes(VOLTA_TOOL_IMAGE_MARKER);
-}
-
 function deriveVoltaHomeFromPathSegments(segments: string[]): string | null {
   for (const segment of segments) {
     const trimmedSegment = segment.trim();
@@ -174,6 +170,67 @@ function deriveVoltaHomeFromPathSegments(segments: string[]): string | null {
 
   return null;
 }
+
+// ─── Clean PATH from Windows registry ───
+
+const SYSTEM_PATH_REGISTRY_KEY = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment';
+const USER_PATH_REGISTRY_KEY = 'HKCU\\Environment';
+
+let resolvedRegistryPath: string | null | undefined;
+
+function readWindowsRegistryValue(registryKey: string, valueName: string): string | null {
+  try {
+    const { spawnSync: registrySpawnSync } = require('node:child_process');
+    const result = registrySpawnSync('reg', ['query', registryKey, '/v', valueName], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+      timeout: 5000,
+      windowsHide: true,
+    });
+    if (result.status !== 0 || typeof result.stdout !== 'string') {
+      return null;
+    }
+    const match = result.stdout.match(/^\s+\S+\s+REG_(?:EXPAND_)?SZ\s+(.+?)$/m);
+    return match ? match[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function expandWindowsEnvVars(
+  value: string,
+  env: Record<string, string | undefined>,
+): string {
+  return value.replace(/%([^%]+)%/g, (original, varName) => {
+    const expanded = env[varName];
+    return typeof expanded === 'string' ? expanded : original;
+  });
+}
+
+function getCleanWindowsPath(
+  env: Record<string, string | undefined>,
+): string | null {
+  if (resolvedRegistryPath !== undefined) {
+    return resolvedRegistryPath;
+  }
+
+  const systemPath = readWindowsRegistryValue(SYSTEM_PATH_REGISTRY_KEY, 'Path');
+  const userPath = readWindowsRegistryValue(USER_PATH_REGISTRY_KEY, 'Path');
+
+  if (!systemPath && !userPath) {
+    resolvedRegistryPath = null;
+    return null;
+  }
+
+  const parts: string[] = [];
+  if (systemPath) parts.push(expandWindowsEnvVars(systemPath, env));
+  if (userPath) parts.push(expandWindowsEnvVars(userPath, env));
+
+  resolvedRegistryPath = parts.join(WINDOWS_PATH_DELIMITER);
+  return resolvedRegistryPath;
+}
+
+// ─── Leaked npm environment cleanup ───
 
 /** Env-var prefixes that leak from npm lifecycle scripts and must not persist into child terminals. */
 const LEAKED_ENV_PREFIXES = ['npm_lifecycle_', 'npm_package_', 'npm_config_'];
@@ -203,25 +260,33 @@ export function normalizeWindowsSpawnEnv(
     }
   }
 
-  const mergedPathSegments = Object.entries(env)
-    .filter(([key, value]) => key.toLowerCase() === 'path' && typeof value === 'string')
-    .sort(([leftKey], [rightKey]) => {
-      if (leftKey === 'Path') return -1;
-      if (rightKey === 'Path') return 1;
-      if (leftKey === 'PATH') return -1;
-      if (rightKey === 'PATH') return 1;
-      return leftKey.localeCompare(rightKey);
-    })
-    .flatMap(([, value]) => (value ? value.split(WINDOWS_PATH_DELIMITER) : []));
+  // Prefer clean PATH from Windows registry — matches what a fresh terminal window receives.
+  // Falls back to merging PATH entries from the inherited environment when registry is unavailable.
+  const cleanPath = getCleanWindowsPath(env);
 
-  // Derive Volta home so the shim directory can be prepended
-  const voltaHome = env.VOLTA_HOME?.trim() || deriveVoltaHomeFromPathSegments(mergedPathSegments);
+  let pathSegments: string[];
+  if (cleanPath) {
+    pathSegments = cleanPath.split(WINDOWS_PATH_DELIMITER);
+  } else {
+    pathSegments = Object.entries(env)
+      .filter(([key, value]) => key.toLowerCase() === 'path' && typeof value === 'string')
+      .sort(([leftKey], [rightKey]) => {
+        if (leftKey === 'Path') return -1;
+        if (rightKey === 'Path') return 1;
+        if (leftKey === 'PATH') return -1;
+        if (rightKey === 'PATH') return 1;
+        return leftKey.localeCompare(rightKey);
+      })
+      .flatMap(([, value]) => (value ? value.split(WINDOWS_PATH_DELIMITER) : []));
 
-  if (voltaHome) {
-    mergedPathSegments.unshift(path.win32.join(voltaHome, 'bin'));
+    // In the fallback path, ensure Volta shim directory has priority
+    const voltaHome = env.VOLTA_HOME?.trim() || deriveVoltaHomeFromPathSegments(pathSegments);
+    if (voltaHome) {
+      pathSegments.unshift(path.win32.join(voltaHome, 'bin'));
+    }
   }
 
-  const dedupedPathSegments = dedupeWindowsPathSegments(mergedPathSegments);
+  const dedupedPathSegments = dedupeWindowsPathSegments(pathSegments);
   if (dedupedPathSegments.length > 0) {
     normalizedEnv.Path = dedupedPathSegments.join(WINDOWS_PATH_DELIMITER);
   }
@@ -488,6 +553,11 @@ export function getDefaultShell(): string {
 /** @internal For test use only */
 export function _normalizeWindowsPathSegmentForComparison(segment: string): string {
   return normalizeWindowsPathSegment(segment);
+}
+
+/** @internal For test use only — controls the cached registry PATH value */
+export function _setRegistryPathCacheForTesting(value: string | null | undefined): void {
+  resolvedRegistryPath = value;
 }
 
 /** @internal For test use only */

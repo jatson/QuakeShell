@@ -40,7 +40,7 @@ vi.mock('electron-log/main', () => {
 import * as nodePty from 'node-pty';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { spawn, spawnPty, write, resize, onData, onExit, onBell, destroy, normalizeWindowsSpawnEnv, resolveShellPath, setDefaultShell, getDefaultShell, _normalizeWindowsPathSegmentForComparison, _reset } from './terminal-manager';
+import { spawn, spawnPty, write, resize, onData, onExit, onBell, destroy, normalizeWindowsSpawnEnv, resolveShellPath, setDefaultShell, getDefaultShell, _normalizeWindowsPathSegmentForComparison, _setRegistryPathCacheForTesting, _reset } from './terminal-manager';
 
 describe('main/terminal-manager', () => {
   beforeEach(() => {
@@ -346,6 +346,15 @@ describe('main/terminal-manager', () => {
   });
 
   describe('normalizeWindowsSpawnEnv', () => {
+    beforeEach(() => {
+      // Force fallback to env-based PATH for most tests
+      _setRegistryPathCacheForTesting(null);
+    });
+
+    afterEach(() => {
+      _setRegistryPathCacheForTesting(undefined);
+    });
+
     it('preserves drive and UNC roots when normalizing path segments for comparison', () => {
       expect(_normalizeWindowsPathSegmentForComparison('C:\\')).toBe('c:\\');
       expect(_normalizeWindowsPathSegmentForComparison('C:')).toBe('c:.');
@@ -455,6 +464,35 @@ describe('main/terminal-manager', () => {
       expect(pathSegments).toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
       expect(pathSegments).toContain('C:\\Windows\\System32');
       expect(pathSegments).toContain('C:\\Program Files\\Git\\cmd');
+    });
+
+    it('uses clean PATH from Windows registry when available, ignoring polluted env PATH', () => {
+      _setRegistryPathCacheForTesting(
+        'C:\\Windows\\System32;C:\\Windows;C:\\Users\\test\\AppData\\Local\\Volta\\bin;C:\\Program Files\\Git\\cmd',
+      );
+
+      const env = normalizeWindowsSpawnEnv({
+        Path: [
+          'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\node\\22.0.0',
+          'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin',
+          'C:\\Users\\test\\AppData\\Local\\Volta\\bin',
+          'C:\\Windows\\System32',
+        ].join(path.win32.delimiter),
+        SystemRoot: 'C:\\Windows',
+        npm_lifecycle_event: 'postinstall',
+        npm_execpath: 'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin\\npm-cli.js',
+      });
+
+      const pathSegments = env.Path.split(path.win32.delimiter);
+      // Registry PATH is used: no tool-image paths, Volta\bin present from registry
+      expect(pathSegments).toContain('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
+      expect(pathSegments).toContain('C:\\Windows\\System32');
+      expect(pathSegments).toContain('C:\\Program Files\\Git\\cmd');
+      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\node\\22.0.0');
+      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+      // npm leaked vars still stripped
+      expect(env).not.toHaveProperty('npm_lifecycle_event');
+      expect(env).not.toHaveProperty('npm_execpath');
     });
   });
 
