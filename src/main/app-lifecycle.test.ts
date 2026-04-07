@@ -53,8 +53,10 @@ vi.mock('./tray-manager', () => ({
 }));
 
 const mockCreateTab = vi.fn();
+const mockDestroyAllTabs = vi.fn();
 vi.mock('./tab-manager', () => ({
   createTab: (...args: unknown[]) => mockCreateTab(...args),
+  destroyAllTabs: (...args: unknown[]) => mockDestroyAllTabs(...args),
 }));
 
 const mockRegisterContextMenu = vi.fn();
@@ -396,6 +398,18 @@ describe('main/app-lifecycle', () => {
       expect(mockTerminalDestroy).toHaveBeenCalled();
     });
 
+    it('calls tabManager.destroyAllTabs() to kill all tab PTYs', () => {
+      gracefulShutdown();
+      expect(mockDestroyAllTabs).toHaveBeenCalled();
+    });
+
+    it('calls destroyAllTabs() before terminalManager.destroy()', () => {
+      gracefulShutdown();
+      const tabsDestroyOrder = mockDestroyAllTabs.mock.invocationCallOrder[0];
+      const legacyDestroyOrder = mockTerminalDestroy.mock.invocationCallOrder[0];
+      expect(tabsDestroyOrder).toBeLessThan(legacyDestroyOrder);
+    });
+
     it('sets quitting flag on window-manager', () => {
       gracefulShutdown();
       expect(mockSetQuitting).toHaveBeenCalledWith(true);
@@ -430,12 +444,14 @@ describe('main/app-lifecycle', () => {
 
       gracefulShutdown();
 
+      const tabsDestroyOrder = mockDestroyAllTabs.mock.invocationCallOrder[0];
       const destroyOrder = mockTerminalDestroy.mock.invocationCallOrder[0];
       const quittingOrder = mockSetQuitting.mock.invocationCallOrder[0];
       const closeOrder = mockClose.mock.invocationCallOrder[0];
       const trayOrder = mockDestroyTray.mock.invocationCallOrder[0];
       const quitOrder = mockQuit.mock.invocationCallOrder[0];
 
+      expect(tabsDestroyOrder).toBeLessThan(quittingOrder);
       expect(destroyOrder).toBeLessThan(quittingOrder);
       expect(quittingOrder).toBeLessThan(closeOrder);
       expect(closeOrder).toBeLessThan(trayOrder);
@@ -444,6 +460,12 @@ describe('main/app-lifecycle', () => {
 
     it('handles PTY destroy errors gracefully', () => {
       mockTerminalDestroy.mockImplementationOnce(() => { throw new Error('PTY already dead'); });
+      expect(() => gracefulShutdown()).not.toThrow();
+      expect(mockQuit).toHaveBeenCalled();
+    });
+
+    it('handles destroyAllTabs errors gracefully', () => {
+      mockDestroyAllTabs.mockImplementationOnce(() => { throw new Error('tabs already dead'); });
       expect(() => gracefulShutdown()).not.toThrow();
       expect(mockQuit).toHaveBeenCalled();
     });

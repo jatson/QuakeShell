@@ -256,6 +256,16 @@ export function getActiveTabId(): string | null {
   return activeTabId;
 }
 
+/** Kill all tab PTY processes — for use during app shutdown. */
+export function destroyAllTabs(): void {
+  for (const session of tabs.values()) {
+    if (session.ptyProcess) {
+      terminalManager.killPty(session.ptyProcess);
+      session.ptyProcess = null;
+    }
+  }
+}
+
 /** @internal For test use only */
 export function _reset(): void {
   for (const session of tabs.values()) {

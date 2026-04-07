@@ -335,4 +335,33 @@ describe('main/tab-manager', () => {
       );
     });
   });
+
+  describe('destroyAllTabs()', () => {
+    it('calls killPty for every running tab PTY', async () => {
+      await tabManager.init(mockWindow as never, mockStore as never);
+      tabManager.createTab({});
+      tabManager.createTab({});
+
+      vi.mocked(terminalManager.killPty).mockClear();
+      tabManager.destroyAllTabs();
+
+      // 3 tabs total (1 from init + 2 created), each with a ptyProcess
+      expect(terminalManager.killPty).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not throw when there are no tabs', () => {
+      expect(() => tabManager.destroyAllTabs()).not.toThrow();
+    });
+
+    it('skips deferred tabs with no PTY', async () => {
+      await tabManager.init(mockWindow as never, mockStore as never);
+      tabManager.createTab({ deferred: true });
+
+      vi.mocked(terminalManager.killPty).mockClear();
+      tabManager.destroyAllTabs();
+
+      // Only 1 running tab (from init), deferred tab has null ptyProcess
+      expect(terminalManager.killPty).toHaveBeenCalledTimes(1);
+    });
+  });
 });

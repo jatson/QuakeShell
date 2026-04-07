@@ -284,10 +284,11 @@ export function gracefulShutdown(): void {
     updateCheckTimer = null;
   }
 
-  // 1. Kill PTY process
+  // 1. Kill PTY process(es) — destroy all tab PTYs first, then legacy PTY
   try {
+    tabManager.destroyAllTabs();
     terminalManager.destroy();
-    logger.info('PTY process terminated');
+    logger.info('PTY process(es) terminated');
   } catch (error) {
     logger.error('Failed to terminate PTY:', error);
   }
