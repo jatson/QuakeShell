@@ -1,4 +1,4 @@
-import { Tray, Menu, app, nativeTheme, nativeImage, shell } from 'electron';
+import { Tray, Menu, app, dialog, nativeTheme, nativeImage, shell } from 'electron';
 import path from 'node:path';
 import log from 'electron-log/main';
 import * as notificationManager from './notification-manager';
@@ -43,11 +43,14 @@ function buildContextMenu(): Menu {
     {
       label: 'About QuakeShell',
       click: () => {
-        app.setAboutPanelOptions({
-          applicationName: 'QuakeShell',
-          applicationVersion: app.getVersion(),
+        void dialog.showMessageBox({
+          type: 'info',
+          title: 'About QuakeShell',
+          message: 'QuakeShell',
+          detail: `Version ${app.getVersion()}`,
+          buttons: ['OK'],
+          noLink: true,
         });
-        app.showAboutPanel();
       },
     },
     {

@@ -1,5 +1,10 @@
-import { Notification, app } from 'electron';
+import { Notification, app, shell } from 'electron';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import log from 'electron-log/main';
+import { APP_NAME } from '@shared/constants';
 import * as windowManager from './window-manager';
 
 const logger = log.scope('notification-manager');
@@ -7,11 +12,22 @@ const updateLogger = log.scope('update-checker');
 
 const UPDATE_FETCH_TIMEOUT = 10_000; // 10 seconds
 const REGISTRY_URL = 'https://registry.npmjs.org/quakeshell/latest';
+const RELEASES_URL = 'https://github.com/jatson/QuakeShell/releases';
+const NPM_PACKAGE_NAME = 'quakeshell';
+const WINDOWS_PLATFORM = 'win32';
+const WINDOWS_ARCH = 'x64';
+const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
+let pendingUpdateVersion: string | null = null;
+let installingUpdateVersion: string | null = null;
+let updateInstallPromise: Promise<void> | null = null;
+let updateRestartHandler: (() => void) | null = null;
 
 export interface NotificationOptions {
   title: string;
   body: string;
   onClick?: () => void;
+  bypassSuppression?: boolean;
 }
 
 export interface UpdateCheckResult {
@@ -19,6 +35,237 @@ export interface UpdateCheckResult {
   currentVersion: string;
   latestVersion: string | null;
   error?: string;
+}
+
+export function setUpdateRestartHandler(handler: (() => void) | null): void {
+  updateRestartHandler = handler;
+}
+
+function getInstallRoot(environment = process.env): string {
+  return path.resolve(environment.QUAKESHELL_INSTALL_ROOT || path.join(os.homedir(), '.quakeshell', 'npm'));
+}
+
+function getVersionInstallDir(version: string, environment = process.env): string {
+  return path.join(getInstallRoot(environment), 'versions', `${version}-${WINDOWS_PLATFORM}-${WINDOWS_ARCH}`);
+}
+
+function findExecutable(rootDirectory: string, executableName: string): string | null {
+  if (!fs.existsSync(rootDirectory)) {
+    return null;
+  }
+
+  const pendingDirectories = [rootDirectory];
+  const targetName = executableName.toLowerCase();
+  const visitedDirectories = new Set<string>();
+
+  while (pendingDirectories.length > 0) {
+    const currentDirectory = pendingDirectories.pop();
+    if (!currentDirectory) {
+      continue;
+    }
+
+    let realPath: string;
+    try {
+      realPath = (fs.realpathSync.native || fs.realpathSync)(currentDirectory);
+    } catch {
+      continue;
+    }
+
+    if (visitedDirectories.has(realPath)) {
+      continue;
+    }
+
+    visitedDirectories.add(realPath);
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(currentDirectory, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(currentDirectory, entry.name);
+      if (entry.isDirectory()) {
+        pendingDirectories.push(fullPath);
+        continue;
+      }
+
+      if (entry.isFile() && entry.name.toLowerCase() === targetName) {
+        return fullPath;
+      }
+    }
+  }
+
+  return null;
+}
+
+function getInstalledExecutable(version: string, environment = process.env): string | null {
+  return findExecutable(
+    getVersionInstallDir(version, environment),
+    `${NPM_PACKAGE_NAME}.exe`,
+  );
+}
+
+function getReleasePageUrl(version: string): string {
+  return `${RELEASES_URL}/tag/v${version}`;
+}
+
+function isNpmManagedInstall(environment = process.env, executablePath = process.execPath): boolean {
+  const versionsRoot = `${path.resolve(getInstallRoot(environment), 'versions').toLowerCase()}${path.sep}`;
+  const normalizedExecutablePath = path.resolve(executablePath).toLowerCase();
+  return normalizedExecutablePath.startsWith(versionsRoot);
+}
+
+function canAutoInstallUpdate(environment = process.env, executablePath = process.execPath): boolean {
+  return process.platform === WINDOWS_PLATFORM && isNpmManagedInstall(environment, executablePath);
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function parseSemver(version: string): [number, number, number] | null {
+  if (!SEMVER_PATTERN.test(version)) {
+    return null;
+  }
+
+  const [coreVersion] = version.split(/[+-]/, 1);
+  const [major, minor, patch] = coreVersion.split('.', 3).map(Number);
+  return [major, minor, patch];
+}
+
+function validateRegistryVersion(version: string | null): string {
+  if (!version || parseSemver(version) === null) {
+    throw new Error('Invalid response: invalid version field');
+  }
+
+  return version;
+}
+
+function runNpmInstall(version: string): Promise<void> {
+  if (parseSemver(version) === null) {
+    return Promise.reject(new Error(`Refusing to install invalid version: ${version}`));
+  }
+
+  const npmExecutable = process.platform === WINDOWS_PLATFORM ? 'npm.cmd' : 'npm';
+  const child = spawn(npmExecutable, ['install', '-g', `${NPM_PACKAGE_NAME}@${version}`], {
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+
+  return new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(`npm install failed with exit code ${code ?? 'unknown'} for ${NPM_PACKAGE_NAME}@${version}`));
+    });
+  });
+}
+
+function launchDetachedExecutable(executablePath: string): Promise<void> {
+  const child = spawn(executablePath, [], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+
+  return new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('spawn', () => {
+      try {
+        child.unref();
+      } catch {
+        // Ignore unref failures after a successful spawn.
+      }
+
+      resolve();
+    });
+  });
+}
+
+function notifyUpdateReady(version: string): void {
+  send({
+    title: APP_NAME,
+    body: `${APP_NAME} v${version} installed. Click to restart.`,
+    onClick: () => {
+      void restartIntoInstalledVersion(version);
+    },
+    bypassSuppression: true,
+  });
+}
+
+async function restartIntoInstalledVersion(version: string): Promise<void> {
+  const executablePath = getInstalledExecutable(version);
+
+  if (!executablePath) {
+    void shell.openExternal(getReleasePageUrl(version));
+    return;
+  }
+
+  try {
+    await launchDetachedExecutable(executablePath);
+    if (updateRestartHandler) {
+      updateRestartHandler();
+    } else {
+      app.quit();
+    }
+  } catch (error) {
+    const message = getErrorMessage(error);
+    updateLogger.warn(`Failed to relaunch ${APP_NAME} ${version}: ${message}`);
+    void shell.openExternal(getReleasePageUrl(version));
+  }
+}
+
+async function installAvailableUpdate(latestVersion: string): Promise<void> {
+  const validatedVersion = validateRegistryVersion(latestVersion);
+
+  if (pendingUpdateVersion === validatedVersion) {
+    notifyUpdateReady(validatedVersion);
+    return;
+  }
+
+  if (updateInstallPromise && installingUpdateVersion === validatedVersion) {
+    return updateInstallPromise;
+  }
+
+  installingUpdateVersion = validatedVersion;
+  send({
+    title: APP_NAME,
+    body: `Installing ${APP_NAME} v${validatedVersion}...`,
+    onClick: () => undefined,
+    bypassSuppression: true,
+  });
+
+  updateInstallPromise = runNpmInstall(validatedVersion)
+    .then(() => {
+      pendingUpdateVersion = validatedVersion;
+      updateLogger.info(`Update installed: ${validatedVersion}`);
+      notifyUpdateReady(validatedVersion);
+    })
+    .catch((error) => {
+      pendingUpdateVersion = null;
+      const message = getErrorMessage(error);
+      updateLogger.warn(`Automatic update failed: ${message}`);
+      send({
+        title: APP_NAME,
+        body: `Automatic update failed. Click to open ${APP_NAME} v${validatedVersion}.`,
+        onClick: () => {
+          void shell.openExternal(getReleasePageUrl(validatedVersion));
+        },
+        bypassSuppression: true,
+      });
+    })
+    .finally(() => {
+      installingUpdateVersion = null;
+      updateInstallPromise = null;
+    });
+
+  return updateInstallPromise;
 }
 
 /**
@@ -35,7 +282,7 @@ export function isNotificationSuppressed(): boolean {
  * Suppressed if the terminal is visible and focused (AC #3).
  */
 export function send(options: NotificationOptions): void {
-  if (isNotificationSuppressed()) {
+  if (!options.bypassSuppression && isNotificationSuppressed()) {
     logger.info('Notification suppressed — terminal is visible and focused');
     return;
   }
@@ -66,8 +313,12 @@ export function send(options: NotificationOptions): void {
  * Returns true if b is newer than a.
  */
 function isNewerVersion(current: string, latest: string): boolean {
-  const c = current.split('.').map(Number);
-  const l = latest.split('.').map(Number);
+  const c = parseSemver(current);
+  const l = parseSemver(latest);
+  if (!c || !l) {
+    return false;
+  }
+
   for (let i = 0; i < 3; i++) {
     const cv = c[i] || 0;
     const lv = l[i] || 0;
@@ -96,24 +347,38 @@ export async function checkForUpdates(manual = false): Promise<UpdateCheckResult
     }
 
     const data = await response.json() as { version?: string };
-    const latestVersion = data.version ?? null;
-
-    if (!latestVersion) {
-      throw new Error('Invalid response: no version field');
-    }
+    const latestVersion = validateRegistryVersion(data.version ?? null);
 
     const updateAvailable = isNewerVersion(currentVersion, latestVersion);
 
     if (updateAvailable) {
-      send({
-        title: 'QuakeShell',
-        body: `QuakeShell v${latestVersion} available. Update now?`,
-      });
+      if (pendingUpdateVersion === latestVersion) {
+        notifyUpdateReady(latestVersion);
+      } else if (canAutoInstallUpdate()) {
+        send({
+          title: APP_NAME,
+          body: `${APP_NAME} v${latestVersion} available. Click to install.`,
+          onClick: () => {
+            void installAvailableUpdate(latestVersion);
+          },
+          bypassSuppression: true,
+        });
+      } else {
+        send({
+          title: APP_NAME,
+          body: `${APP_NAME} v${latestVersion} available. Click to download.`,
+          onClick: () => {
+            void shell.openExternal(getReleasePageUrl(latestVersion));
+          },
+          bypassSuppression: true,
+        });
+      }
       updateLogger.info(`Update available: ${currentVersion} → ${latestVersion}`);
     } else if (manual) {
       send({
-        title: 'QuakeShell',
-        body: 'QuakeShell is up to date',
+        title: APP_NAME,
+        body: `${APP_NAME} is up to date`,
+        bypassSuppression: true,
       });
       updateLogger.info(`Up to date: ${currentVersion}`);
     } else {
