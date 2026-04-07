@@ -39,7 +39,8 @@ vi.mock('electron-log/main', () => {
 
 import * as nodePty from 'node-pty';
 import * as fs from 'node:fs';
-import { spawn, spawnPty, write, resize, onData, onExit, onBell, destroy, resolveShellPath, setDefaultShell, getDefaultShell, _reset } from './terminal-manager';
+import * as path from 'node:path';
+import { spawn, spawnPty, write, resize, onData, onExit, onBell, destroy, normalizeWindowsSpawnEnv, resolveShellPath, setDefaultShell, getDefaultShell, _normalizeWindowsPathSegmentForComparison, _reset } from './terminal-manager';
 
 describe('main/terminal-manager', () => {
   beforeEach(() => {
@@ -339,8 +340,58 @@ describe('main/terminal-manager', () => {
     it('does NOT add WSL-specific env var overrides for non-WSL shells', () => {
       spawn('powershell');
       const callArgs = (nodePty.spawn as ReturnType<typeof vi.fn>).mock.calls[0][2];
-      // For non-WSL shells, env should be process.env directly (same reference)
-      expect(callArgs.env).toBe(process.env);
+      expect(callArgs.env.COLORTERM).toBe(process.env.COLORTERM);
+      expect(callArgs.env.TERM).toBe(process.env.TERM);
+    });
+  });
+
+  describe('normalizeWindowsSpawnEnv', () => {
+    it('preserves drive and UNC roots when normalizing path segments for comparison', () => {
+      expect(_normalizeWindowsPathSegmentForComparison('C:\\')).toBe('c:\\');
+      expect(_normalizeWindowsPathSegmentForComparison('C:')).toBe('c:.');
+      expect(_normalizeWindowsPathSegmentForComparison('\\\\server\\share\\')).toBe('\\\\server\\share\\');
+    });
+
+    it('collapses duplicate PATH key variants into a single Path entry', () => {
+      const env = normalizeWindowsSpawnEnv({
+        PATH: [
+          'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin',
+          'C:\\Windows\\System32',
+        ].join(path.win32.delimiter),
+        Path: [
+          'C:\\Users\\test\\AppData\\Local\\Volta\\bin',
+          'C:\\Windows\\System32',
+        ].join(path.win32.delimiter),
+        SystemRoot: 'C:\\Windows',
+      });
+
+      const pathSegments = env.Path.split(path.win32.delimiter);
+      expect(Object.keys(env).filter((key) => key.toLowerCase() === 'path')).toEqual(['Path']);
+      expect(pathSegments[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
+      expect(pathSegments).toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+      expect(pathSegments).toContain('C:\\Windows\\System32');
+    });
+
+    it('prepends the Volta shim directory ahead of tool image bins', () => {
+      const env = normalizeWindowsSpawnEnv({
+        Path: [
+          'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin',
+          'C:\\Windows\\System32',
+        ].join(path.win32.delimiter),
+        VOLTA_HOME: 'C:\\Users\\test\\AppData\\Local\\Volta',
+        SystemRoot: 'C:\\Windows',
+      });
+
+      expect(env.Path.split(path.win32.delimiter)[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
+    });
+
+    it('hydrates SystemRoot from windir when PowerShell prerequisites are missing', () => {
+      const env = normalizeWindowsSpawnEnv({
+        Path: 'C:\\Windows\\System32',
+        windir: 'C:\\Windows',
+      });
+
+      expect(env.SystemRoot).toBe('C:\\Windows');
     });
   });
 

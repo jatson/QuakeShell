@@ -1,5 +1,6 @@
 import * as nodePty from 'node-pty';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import log from 'electron-log/main';
 
 const logger = log.scope('terminal-manager');
@@ -93,12 +94,107 @@ function isWslShell(shellConfig: string): boolean {
   return shellConfig === 'wsl';
 }
 
+function copyStringEnv(
+  env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
+): Record<string, string> {
+  const copiedEnv: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === 'string') {
+      copiedEnv[key] = value;
+    }
+  }
+
+  return copiedEnv;
+}
+
+function isNormalizedWindowsRootPath(segment: string): boolean {
+  return /^[A-Za-z]:\\$/.test(segment) || /^\\\\[^\\]+\\[^\\]+\\$/.test(segment);
+}
+
+function normalizeWindowsPathSegment(segment: string): string {
+  const normalizedSegment = path.win32.normalize(segment);
+  const comparableSegment = isNormalizedWindowsRootPath(normalizedSegment)
+    ? normalizedSegment
+    : normalizedSegment.replace(/[\\/]+$/, '');
+
+  return comparableSegment.toLowerCase();
+}
+
+const WINDOWS_PATH_DELIMITER = path.win32.delimiter;
+
+function dedupeWindowsPathSegments(segments: string[]): string[] {
+  const seen = new Set<string>();
+  const dedupedSegments: string[] = [];
+
+  for (const segment of segments) {
+    const trimmedSegment = segment.trim();
+    if (!trimmedSegment) {
+      continue;
+    }
+
+    const normalizedSegment = normalizeWindowsPathSegment(trimmedSegment);
+    if (seen.has(normalizedSegment)) {
+      continue;
+    }
+
+    seen.add(normalizedSegment);
+    dedupedSegments.push(trimmedSegment);
+  }
+
+  return dedupedSegments;
+}
+
+export function normalizeWindowsSpawnEnv(
+  env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
+): Record<string, string> {
+  const normalizedEnv = copyStringEnv(env);
+
+  for (const key of Object.keys(normalizedEnv)) {
+    if (key.toLowerCase() === 'path') {
+      delete normalizedEnv[key];
+    }
+  }
+
+  const mergedPathSegments = Object.entries(env)
+    .filter(([key, value]) => key.toLowerCase() === 'path' && typeof value === 'string')
+    .sort(([leftKey], [rightKey]) => {
+      if (leftKey === 'Path') return -1;
+      if (rightKey === 'Path') return 1;
+      if (leftKey === 'PATH') return -1;
+      if (rightKey === 'PATH') return 1;
+      return leftKey.localeCompare(rightKey);
+    })
+    .flatMap(([, value]) => (value ? value.split(WINDOWS_PATH_DELIMITER) : []));
+
+  const voltaHome = env.VOLTA_HOME?.trim();
+  if (voltaHome) {
+    mergedPathSegments.unshift(path.win32.join(voltaHome, 'bin'));
+  }
+
+  const dedupedPathSegments = dedupeWindowsPathSegments(mergedPathSegments);
+  if (dedupedPathSegments.length > 0) {
+    normalizedEnv.Path = dedupedPathSegments.join(WINDOWS_PATH_DELIMITER);
+  }
+
+  const systemRoot = normalizedEnv.SystemRoot ?? env.SystemRoot ?? env.windir ?? env.WINDIR;
+  if (typeof systemRoot === 'string' && systemRoot.trim() !== '') {
+    normalizedEnv.SystemRoot = systemRoot.trim();
+  }
+
+  return normalizedEnv;
+}
+
 /** Build environment variables for spawn, adding WSL-specific vars when needed */
 function buildSpawnEnv(shellConfig: string): Record<string, string> {
-  const env = process.env as Record<string, string>;
+  const env = process.platform === 'win32'
+    ? normalizeWindowsSpawnEnv(process.env as Record<string, string | undefined>)
+    : copyStringEnv(process.env as Record<string, string | undefined>);
+
   if (isWslShell(shellConfig)) {
     return { ...env, COLORTERM: 'truecolor', TERM: 'xterm-256color' };
   }
+
   return env;
 }
 
@@ -338,6 +434,11 @@ export function setDefaultShell(shell: string): void {
 /** Get the current default shell preference (pending or initial) */
 export function getDefaultShell(): string {
   return pendingDefaultShell ?? 'powershell';
+}
+
+/** @internal For test use only */
+export function _normalizeWindowsPathSegmentForComparison(segment: string): string {
+  return normalizeWindowsPathSegment(segment);
 }
 
 /** @internal For test use only */
