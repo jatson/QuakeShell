@@ -352,7 +352,7 @@ describe('main/terminal-manager', () => {
       expect(_normalizeWindowsPathSegmentForComparison('\\\\server\\share\\')).toBe('\\\\server\\share\\');
     });
 
-    it('collapses duplicate PATH key variants into a single Path entry and strips Volta tool-image paths', () => {
+    it('collapses duplicate PATH key variants into a single Path entry with Volta shim first', () => {
       const env = normalizeWindowsSpawnEnv({
         PATH: [
           'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin',
@@ -368,11 +368,11 @@ describe('main/terminal-manager', () => {
       const pathSegments = env.Path.split(path.win32.delimiter);
       expect(Object.keys(env).filter((key) => key.toLowerCase() === 'path')).toEqual(['Path']);
       expect(pathSegments[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
-      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+      expect(pathSegments).toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
       expect(pathSegments).toContain('C:\\Windows\\System32');
     });
 
-    it('prepends the Volta shim directory and strips tool-image bins', () => {
+    it('prepends the Volta shim directory ahead of tool-image bins', () => {
       const env = normalizeWindowsSpawnEnv({
         Path: [
           'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin',
@@ -384,11 +384,11 @@ describe('main/terminal-manager', () => {
 
       const pathSegments = env.Path.split(path.win32.delimiter);
       expect(pathSegments[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
-      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+      expect(pathSegments).toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
       expect(pathSegments).toContain('C:\\Windows\\System32');
     });
 
-    it('derives the Volta shim directory from tool image bins when VOLTA_HOME is missing and strips tool-image entries', () => {
+    it('derives the Volta shim directory from tool image bins when VOLTA_HOME is missing', () => {
       const env = normalizeWindowsSpawnEnv({
         Path: [
           'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin',
@@ -399,7 +399,7 @@ describe('main/terminal-manager', () => {
 
       const pathSegments = env.Path.split(path.win32.delimiter);
       expect(pathSegments[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
-      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+      expect(pathSegments).toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
       expect(pathSegments).toContain('C:\\Windows\\System32');
     });
 
@@ -436,7 +436,7 @@ describe('main/terminal-manager', () => {
       expect(env.USERPROFILE).toBe('C:\\Users\\test');
     });
 
-    it('strips multiple Volta tool-image paths including node and npm', () => {
+    it('keeps Volta tool-image paths but ensures shim directory comes first', () => {
       const env = normalizeWindowsSpawnEnv({
         Path: [
           'C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\node\\22.0.0',
@@ -451,8 +451,8 @@ describe('main/terminal-manager', () => {
 
       const pathSegments = env.Path.split(path.win32.delimiter);
       expect(pathSegments[0]).toBe('C:\\Users\\test\\AppData\\Local\\Volta\\bin');
-      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\node\\22.0.0');
-      expect(pathSegments).not.toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
+      expect(pathSegments).toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\node\\22.0.0');
+      expect(pathSegments).toContain('C:\\Users\\test\\AppData\\Local\\Volta\\tools\\image\\npm\\11.10.0\\bin');
       expect(pathSegments).toContain('C:\\Windows\\System32');
       expect(pathSegments).toContain('C:\\Program Files\\Git\\cmd');
     });

@@ -214,19 +214,14 @@ export function normalizeWindowsSpawnEnv(
     })
     .flatMap(([, value]) => (value ? value.split(WINDOWS_PATH_DELIMITER) : []));
 
-  // Derive Volta home BEFORE stripping tool-image paths so derivation still works
+  // Derive Volta home so the shim directory can be prepended
   const voltaHome = env.VOLTA_HOME?.trim() || deriveVoltaHomeFromPathSegments(mergedPathSegments);
 
-  // Strip Volta internal tool-image paths — shims re-inject them at runtime
-  const cleanedPathSegments = mergedPathSegments.filter(
-    (segment) => !isVoltaToolImagePath(segment),
-  );
-
   if (voltaHome) {
-    cleanedPathSegments.unshift(path.win32.join(voltaHome, 'bin'));
+    mergedPathSegments.unshift(path.win32.join(voltaHome, 'bin'));
   }
 
-  const dedupedPathSegments = dedupeWindowsPathSegments(cleanedPathSegments);
+  const dedupedPathSegments = dedupeWindowsPathSegments(mergedPathSegments);
   if (dedupedPathSegments.length > 0) {
     normalizedEnv.Path = dedupedPathSegments.join(WINDOWS_PATH_DELIMITER);
   }
