@@ -15,6 +15,7 @@ const BUNDLED_THEME_FILES = [
   'retro-green.json',
   'solarized-dark.json',
 ] as const;
+// Keep the existing on-disk 'theme-boundle-*.json' filenames for shipped assets.
 const SHIPPED_THEME_PACK_FILES = [
   'theme-boundle-dark.json',
   'theme-boundle-light.json',

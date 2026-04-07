@@ -117,9 +117,16 @@ describe('ThemesSettings', () => {
     });
     await flush();
 
-    expect(container.textContent).toContain('Tokyo Night');
-    expect(container.textContent).toContain('Midnight Mint');
-    expect(container.textContent).toContain('Custom Blue');
+    const themeCards = Array.from(
+      container.querySelectorAll('button[role="radio"]'),
+    ) as HTMLButtonElement[];
+
+    expect(themeCards).toHaveLength(themes.length);
+    expect(themeCards.map((button) => button.textContent ?? '')).toEqual([
+      expect.stringContaining('Tokyo Night'),
+      expect.stringContaining('Midnight Mint'),
+      expect.stringContaining('Custom Blue'),
+    ]);
   });
 
   it('marks the active theme card', async () => {

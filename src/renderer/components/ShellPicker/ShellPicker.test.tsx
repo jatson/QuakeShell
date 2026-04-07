@@ -98,10 +98,21 @@ describe('ShellPicker', () => {
   });
 
   it('falls back to default shells on error', async () => {
-    mockAvailableShells.mockRejectedValue(new Error('fail'));
-    await renderAndWait();
-    expect(container.textContent).toContain('Windows PowerShell');
-    expect(container.textContent).toContain('Command Prompt');
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      mockAvailableShells.mockRejectedValue(new Error('fail'));
+      await renderAndWait();
+
+      expect(container.textContent).toContain('Windows PowerShell');
+      expect(container.textContent).toContain('Command Prompt');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[ShellPicker] availableShells() failed:',
+        expect.any(Error),
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('shows hint text', async () => {
