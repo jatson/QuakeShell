@@ -45,6 +45,7 @@ vi.mock('node:crypto', () => ({
 
 import * as terminalManager from './terminal-manager';
 import * as tabManager from './tab-manager';
+import * as windowManager from './window-manager';
 import { CHANNELS } from '@shared/channels';
 
 function createMockWindow() {
@@ -117,6 +118,20 @@ describe('main/tab-manager', () => {
 
       const dto = tabManager.createTab({ shellType: 'bash' });
       expect(dto.shellType).toBe('bash');
+    });
+
+    it('suppresses focus-fade for the first WSL tab launch only', async () => {
+      await tabManager.init(mockWindow as never, mockStore as never);
+      const suppressSpy = vi.spyOn(windowManager, 'suppressFocusFadeForShellLaunch').mockImplementation(() => {});
+
+      tabManager.createTab({ shellType: 'wsl' });
+      expect(suppressSpy).toHaveBeenCalledWith(1500);
+
+      suppressSpy.mockClear();
+      tabManager.createTab({ shellType: 'wsl' });
+      expect(suppressSpy).not.toHaveBeenCalled();
+
+      suppressSpy.mockRestore();
     });
 
     it('forwards cwd to the PTY spawn call', async () => {
@@ -333,6 +348,19 @@ describe('main/tab-manager', () => {
         expect.any(Function),
         'C:\\Projects\\Deferred',
       );
+    });
+    
+    it('suppresses focus-fade when the first WSL launch happens via deferred spawn', async () => {
+      await tabManager.init(mockWindow as never, mockStore as never);
+      const suppressSpy = vi.spyOn(windowManager, 'suppressFocusFadeForShellLaunch').mockImplementation(() => {});
+
+      const deferredTab = tabManager.createTab({ shellType: 'wsl', deferred: true });
+      suppressSpy.mockClear();
+
+      tabManager.spawnTab(deferredTab.id);
+
+      expect(suppressSpy).toHaveBeenCalledWith(1500);
+      suppressSpy.mockRestore();
     });
   });
 

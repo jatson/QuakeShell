@@ -42,10 +42,19 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawn, spawnPty, write, resize, onData, onExit, onBell, destroy, normalizeWindowsSpawnEnv, resolveShellPath, setDefaultShell, getDefaultShell, _normalizeWindowsPathSegmentForComparison, _setRegistryPathCacheForTesting, _reset } from './terminal-manager';
 
+const originalSystemRoot = process.env.SystemRoot;
+const originalProcessorArchitew6432 = process.env.PROCESSOR_ARCHITEW6432;
+
+function getSystemShellPath(...segments: string[]): string {
+  return path.win32.join('C:\\Windows', 'System32', ...segments);
+}
+
 describe('main/terminal-manager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPid = 1234;
+    process.env.SystemRoot = 'C:\\Windows';
+    delete process.env.PROCESSOR_ARCHITEW6432;
     _reset();
   });
 
@@ -56,6 +65,18 @@ describe('main/terminal-manager', () => {
     } catch {
       // ignore
     }
+
+    if (originalSystemRoot === undefined) {
+      delete process.env.SystemRoot;
+    } else {
+      process.env.SystemRoot = originalSystemRoot;
+    }
+
+    if (originalProcessorArchitew6432 === undefined) {
+      delete process.env.PROCESSOR_ARCHITEW6432;
+    } else {
+      process.env.PROCESSOR_ARCHITEW6432 = originalProcessorArchitew6432;
+    }
   });
 
   describe('spawn', () => {
@@ -63,7 +84,7 @@ describe('main/terminal-manager', () => {
       spawn('powershell');
 
       expect(nodePty.spawn).toHaveBeenCalledWith(
-        'powershell.exe',
+        getSystemShellPath('WindowsPowerShell', 'v1.0', 'powershell.exe'),
         [],
         expect.objectContaining({
           name: 'xterm-256color',
@@ -78,7 +99,7 @@ describe('main/terminal-manager', () => {
       spawn('powershell', 200, 50);
 
       expect(nodePty.spawn).toHaveBeenCalledWith(
-        'powershell.exe',
+        getSystemShellPath('WindowsPowerShell', 'v1.0', 'powershell.exe'),
         [],
         expect.objectContaining({
           cols: 200,
@@ -88,7 +109,13 @@ describe('main/terminal-manager', () => {
     });
 
     it('spawns allowed shells: pwsh, cmd, bash, wsl', () => {
-      const expected: Record<string, string> = { pwsh: 'pwsh.exe', cmd: 'cmd.exe', bash: 'bash.exe', wsl: 'wsl.exe' };
+      const expected: Record<string, string> = {
+        pwsh: 'pwsh.exe',
+        cmd: getSystemShellPath('cmd.exe'),
+        bash: 'bash.exe',
+        wsl: getSystemShellPath('wsl.exe'),
+      };
+
       for (const shell of ['pwsh', 'cmd', 'bash', 'wsl']) {
         vi.clearAllMocks();
         spawn(shell);
@@ -211,20 +238,22 @@ describe('main/terminal-manager', () => {
   });
 
   describe('resolveShellPath', () => {
-    it('maps "powershell" to "powershell.exe"', () => {
-      expect(resolveShellPath('powershell')).toBe('powershell.exe');
+    it('maps "powershell" to the absolute system PowerShell path', () => {
+      expect(resolveShellPath('powershell')).toBe(
+        getSystemShellPath('WindowsPowerShell', 'v1.0', 'powershell.exe'),
+      );
     });
 
-    it('maps "wsl" to "wsl.exe"', () => {
-      expect(resolveShellPath('wsl')).toBe('wsl.exe');
+    it('maps "wsl" to the absolute system WSL path', () => {
+      expect(resolveShellPath('wsl')).toBe(getSystemShellPath('wsl.exe'));
     });
 
     it('maps "pwsh" to "pwsh.exe"', () => {
       expect(resolveShellPath('pwsh')).toBe('pwsh.exe');
     });
 
-    it('maps "cmd" to "cmd.exe"', () => {
-      expect(resolveShellPath('cmd')).toBe('cmd.exe');
+    it('maps "cmd" to the absolute system cmd path', () => {
+      expect(resolveShellPath('cmd')).toBe(getSystemShellPath('cmd.exe'));
     });
 
     it('maps "bash" to "bash.exe"', () => {
@@ -257,7 +286,7 @@ describe('main/terminal-manager', () => {
     it('spawns allowlisted shells by alias', () => {
       spawn('wsl');
       expect(nodePty.spawn).toHaveBeenCalledWith(
-        'wsl.exe',
+        getSystemShellPath('wsl.exe'),
         [],
         expect.any(Object),
       );
@@ -272,7 +301,7 @@ describe('main/terminal-manager', () => {
       spawnPty('powershell', 120, 40, onDataCb, onExitCb, 'C:\\Projects\\QuakeShell');
 
       expect(nodePty.spawn).toHaveBeenCalledWith(
-        'powershell.exe',
+        getSystemShellPath('WindowsPowerShell', 'v1.0', 'powershell.exe'),
         [],
         expect.objectContaining({
           cols: 120,
@@ -303,7 +332,7 @@ describe('main/terminal-manager', () => {
       spawn(getDefaultShell());
 
       expect(nodePty.spawn).toHaveBeenCalledWith(
-        'wsl.exe',
+        getSystemShellPath('wsl.exe'),
         [],
         expect.any(Object),
       );
@@ -326,7 +355,7 @@ describe('main/terminal-manager', () => {
     it('passes COLORTERM and TERM env vars when spawning WSL', () => {
       spawn('wsl');
       expect(nodePty.spawn).toHaveBeenCalledWith(
-        'wsl.exe',
+        getSystemShellPath('wsl.exe'),
         [],
         expect.objectContaining({
           env: expect.objectContaining({

@@ -10,14 +10,20 @@ const mockSetBounds = vi.fn((b: Record<string, number>) => {
 const mockGetBounds = vi.fn(() => ({ ...mockBounds }));
 const mockLoadURL = vi.fn();
 const mockLoadFile = vi.fn();
-const mockFocus = vi.fn();
+let mockWindowFocused = false;
+const mockFocus = vi.fn(() => {
+  mockWindowFocused = true;
+});
 const mockShow = vi.fn();
-const mockBlur = vi.fn();
+const mockBlur = vi.fn(() => {
+  mockWindowFocused = false;
+});
 const mockClose = vi.fn();
 const mockShowInactive = vi.fn();
 const mockOn = vi.fn();
 const mockRemoveListener = vi.fn();
 const mockSetOpacity = vi.fn();
+const mockIsFocused = vi.fn(() => mockWindowFocused);
 const mockWebContents = { send: vi.fn(), openDevTools: vi.fn() };
 let lastBrowserWindowArgs: unknown = null;
 const createdBrowserWindowArgs: unknown[] = [];
@@ -58,6 +64,7 @@ vi.mock('electron', () => {
         }
       },
       setOpacity: mockSetOpacity,
+      isFocused: mockIsFocused,
       isDestroyed: vi.fn(() => false),
       webContents: mockWebContents,
     };
@@ -129,6 +136,7 @@ import {
   setOpacity,
   onStateChange,
   setupFocusFade,
+  suppressFocusFadeForShellLaunch,
   teardownFocusFade,
   isAnimating,
   setReducedMotion,
@@ -142,6 +150,12 @@ import {
 import { screen, nativeTheme } from 'electron';
 
 function simulateEvent(event: string): void {
+  if (event === 'focus') {
+    mockWindowFocused = true;
+  } else if (event === 'blur') {
+    mockWindowFocused = false;
+  }
+
   if (eventHandlers[event]) {
     for (const handler of [...eventHandlers[event]]) {
       handler();
@@ -185,6 +199,7 @@ describe('main/window-manager', () => {
     _reset();
     lastBrowserWindowArgs = null;
     createdBrowserWindowArgs.length = 0;
+    mockWindowFocused = false;
     mockBounds.x = 0;
     mockBounds.y = -312;
     mockBounds.width = 1920;
@@ -729,6 +744,55 @@ describe('main/window-manager', () => {
 
       // Window should still be visible
       expect(isVisible()).toBe(true);
+    });
+
+    it('does not hide during shell-launch suppression when focus returns before the guard expires', async () => {
+      const configStore = createMockConfigStore();
+      configStore.get.mockImplementation((key: string) => {
+        if (key === 'focusFade') return true;
+        if (key === 'opacity') return 0.85;
+        if (key === 'dropHeight') return 30;
+        if (key === 'animationSpeed') return 200;
+        return undefined;
+      });
+      await showWindow(configStore);
+      setupFocusFade();
+      suppressFocusFadeForShellLaunch(1000);
+
+      simulateEvent('blur');
+      vi.advanceTimersByTime(600);
+      expect(isVisible()).toBe(true);
+
+      simulateEvent('focus');
+      vi.advanceTimersByTime(1000);
+      await vi.runAllTimersAsync();
+
+      expect(isVisible()).toBe(true);
+    });
+
+    it('hides after shell-launch suppression expires when blur persists', async () => {
+      const configStore = createMockConfigStore();
+      configStore.get.mockImplementation((key: string) => {
+        if (key === 'focusFade') return true;
+        if (key === 'opacity') return 0.85;
+        if (key === 'dropHeight') return 30;
+        if (key === 'animationSpeed') return 200;
+        return undefined;
+      });
+      await showWindow(configStore);
+      setupFocusFade();
+      suppressFocusFadeForShellLaunch(1000);
+
+      simulateEvent('blur');
+
+      vi.advanceTimersByTime(1299);
+      expect(isVisible()).toBe(true);
+
+      vi.advanceTimersByTime(1);
+      vi.advanceTimersByTime(200);
+      await vi.runAllTimersAsync();
+
+      expect(isVisible()).toBe(false);
     });
 
     it('does not trigger hide when window is already hidden', async () => {
