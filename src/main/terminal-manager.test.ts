@@ -6,6 +6,14 @@ const mockResize = vi.fn();
 const mockKill = vi.fn();
 const mockOnData = vi.fn();
 const mockOnExit = vi.fn();
+const { mockLogger } = vi.hoisted(() => ({
+  mockLogger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
 let mockPid = 1234;
 
 vi.mock('node-pty', () => ({
@@ -24,15 +32,9 @@ vi.mock('node:fs', () => ({
 }));
 
 vi.mock('electron-log/main', () => {
-  const scopedLogger = {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  };
   return {
     default: {
-      scope: vi.fn(() => scopedLogger),
+      scope: vi.fn(() => mockLogger),
     },
   };
 });
@@ -174,12 +176,17 @@ describe('main/terminal-manager', () => {
   });
 
   describe('onData', () => {
-    it('registers a data callback wrapper on the PTY', () => {
+    it('uses the active PTY data handler after registering a callback post-spawn', () => {
       spawn('powershell');
+      const registeredHandler = mockOnData.mock.calls[mockOnData.mock.calls.length - 1][0];
+
       const cb = vi.fn();
       onData(cb);
-      // onData wraps the callback to inject tabId, so it registers a wrapper function
-      expect(mockOnData).toHaveBeenCalledWith(expect.any(Function));
+
+      registeredHandler('test data');
+
+      expect(mockOnData).toHaveBeenCalledTimes(1);
+      expect(cb).toHaveBeenCalledWith('default', 'test data');
     });
 
     it('stores callback without error when no PTY is running', () => {
@@ -214,6 +221,25 @@ describe('main/terminal-manager', () => {
       ptyOnExitHandler({ exitCode: 0, signal: 0 });
 
       expect(exitCb).toHaveBeenCalledWith(0, 0);
+    });
+
+    it('logs the exited PTY pid from the original spawn after a respawn', () => {
+      const exitCb = vi.fn();
+      onExit(exitCb);
+
+      mockPid = 1111;
+      spawn('powershell');
+      const firstExitHandler = mockOnExit.mock.calls[0][0];
+
+      mockPid = 2222;
+      spawn('powershell');
+
+      firstExitHandler({ exitCode: 5, signal: 9 });
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'PTY exited (PID: 1111, exitCode: 5, signal: 9)',
+      );
+      expect(exitCb).not.toHaveBeenCalled();
     });
   });
 
@@ -698,6 +724,25 @@ describe('main/terminal-manager', () => {
       exitHandler({ exitCode: 0, signal: 0 });
 
       expect(exitCb).toHaveBeenCalledWith(0, 0);
+    });
+  });
+
+  describe('stale PTY data guard', () => {
+    it('does NOT forward data or bell events when a killed PTY emits after a new spawn', () => {
+      const dataCb = vi.fn();
+      const bellCb = vi.fn();
+      onData(dataCb);
+      onBell(bellCb);
+
+      spawn('powershell');
+      const firstDataHandler = mockOnData.mock.calls[0][0];
+
+      spawn('powershell');
+
+      firstDataHandler('stale\x07data');
+
+      expect(dataCb).not.toHaveBeenCalled();
+      expect(bellCb).not.toHaveBeenCalled();
     });
   });
 });

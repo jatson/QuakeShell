@@ -430,25 +430,31 @@ export function spawn(shell: string, cols?: number, rows?: number): void {
       env,
     });
 
+    const spawnedPty = ptyProcess;
+    const spawnedPid = spawnedPty.pid;
     const myGeneration = ++ptyGeneration;
 
     logger.info(
-      `Spawned shell → ${resolvedPath} (PID: ${ptyProcess.pid}, ${spawnCols}x${spawnRows})`,
+      `Spawned shell → ${resolvedPath} (PID: ${spawnedPid}, ${spawnCols}x${spawnRows})`,
     );
 
     // Wire persistent data callback to new instance, with bell detection
-    ptyProcess.onData((data: string) => {
+    spawnedPty.onData((data: string) => {
+      if (myGeneration !== ptyGeneration) {
+        return;
+      }
+
       if (bellCallback && data.includes('\x07')) {
         bellCallback();
       }
       dataCallback?.('default', data);
     });
 
-    ptyProcess.onExit(({ exitCode, signal }) => {
+    spawnedPty.onExit(({ exitCode, signal }) => {
       const finalExitCode = exitCode ?? 0;
       const finalSignal = signal ?? 0;
       logger.info(
-        `PTY exited (PID: ${ptyProcess?.pid}, exitCode: ${finalExitCode}, signal: ${finalSignal})`,
+        `PTY exited (PID: ${spawnedPid}, exitCode: ${finalExitCode}, signal: ${finalSignal})`,
       );
       // Ignore exit from a PTY that was replaced by a newer spawn
       if (myGeneration !== ptyGeneration) return;
@@ -492,9 +498,6 @@ export function resize(cols: number, rows: number): void {
 /** Register a persistent data callback — automatically wired to new PTY instances */
 export function onData(callback: (tabId: string, data: string) => void): void {
   dataCallback = callback;
-  if (ptyProcess) {
-    ptyProcess.onData((data: string) => callback('default', data));
-  }
 }
 
 /** Register a persistent exit callback — fires on every PTY exit (including respawns) */
