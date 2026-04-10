@@ -24,9 +24,11 @@ let blurHandler: (() => void) | null = null;
 let focusHandler: (() => void) | null = null;
 let lastDisplayId: number | null = null;
 let reducedMotion = false;
+let focusFadeShellLaunchSuppressedUntil = 0;
 
 const SETTINGS_WINDOW_WIDTH = 920;
 const SETTINGS_WINDOW_HEIGHT = 760;
+const FOCUS_FADE_GRACE_PERIOD_MS = 300;
 
 type StateChangeCallback = (visible: boolean) => void;
 let onStateChangeCallback: StateChangeCallback | null = null;
@@ -57,6 +59,41 @@ function isWindowUnavailable(window: BrowserWindow | null): boolean {
 
 function isFocusFadeSuppressed(): boolean {
   return !isWindowUnavailable(settingsWindow);
+}
+
+function getFocusFadeShellLaunchSuppressionRemaining(): number {
+  return Math.max(0, focusFadeShellLaunchSuppressedUntil - Date.now());
+}
+
+function isWindowFocused(): boolean {
+  const currentWindow = win;
+  if (currentWindow === null) {
+    return false;
+  }
+
+  if (typeof currentWindow.isDestroyed === 'function' && currentWindow.isDestroyed()) {
+    return false;
+  }
+
+  if (typeof currentWindow.isFocused !== 'function') {
+    return false;
+  }
+
+  return currentWindow.isFocused();
+}
+
+export function suppressFocusFadeForShellLaunch(durationMs = 1200): void {
+  const normalizedDuration = Math.max(0, Math.round(durationMs));
+  if (normalizedDuration === 0) {
+    return;
+  }
+
+  focusFadeShellLaunchSuppressedUntil = Math.max(
+    focusFadeShellLaunchSuppressedUntil,
+    Date.now() + normalizedDuration,
+  );
+
+  logger.info(`Focus-fade suppressed for shell launch (${normalizedDuration}ms)`);
 }
 
 function getPackagedRendererEntryCandidates(): string[] {
@@ -642,6 +679,23 @@ export function setupFocusFade(): void {
   // Teardown any existing handlers first
   teardownFocusFade();
 
+  const scheduleFocusFadeHide = (delayMs: number) => {
+    clearFocusFadeTimer();
+    focusFadeTimer = setTimeout(() => {
+      focusFadeTimer = null;
+      // Re-check guards after grace period / launch suppression
+      if (
+        visible
+        && !animating
+        && !isFocusFadeSuppressed()
+        && getFocusFadeShellLaunchSuppressionRemaining() <= 0
+        && !isWindowFocused()
+      ) {
+        void hide();
+      }
+    }, delayMs);
+  };
+
   blurHandler = () => {
     // Don't trigger focus-fade during animations or when already hidden
     if (animating || !visible) return;
@@ -651,13 +705,9 @@ export function setupFocusFade(): void {
       return;
     }
 
-    focusFadeTimer = setTimeout(() => {
-      focusFadeTimer = null;
-      // Re-check guards after grace period
-      if (visible && !animating && !isFocusFadeSuppressed()) {
-        hide();
-      }
-    }, 300);
+    scheduleFocusFadeHide(
+      FOCUS_FADE_GRACE_PERIOD_MS + getFocusFadeShellLaunchSuppressionRemaining(),
+    );
   };
 
   focusHandler = () => {
@@ -797,4 +847,5 @@ export function _reset(): void {
   clearFocusFadeTimer();
   blurHandler = null;
   focusHandler = null;
+  focusFadeShellLaunchSuppressedUntil = 0;
 }

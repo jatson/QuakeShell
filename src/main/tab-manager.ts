@@ -32,6 +32,9 @@ let activeTabId: string | null = null;
 let mainWindow: BrowserWindow | null = null;
 let configStore: ConfigStore | null = null;
 let colorPaletteIndex = 0;
+let hasUsedInitialWslFocusFadeGuard = false;
+
+const INITIAL_WSL_FOCUS_FADE_SUPPRESSION_MS = 1500;
 
 function toDTO(session: TabSession): TabSessionDTO {
   return {
@@ -62,6 +65,15 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
+function guardInitialWslFocusFade(shell: Shell): void {
+  if (shell !== 'wsl' || hasUsedInitialWslFocusFadeGuard) {
+    return;
+  }
+
+  windowManager.suppressFocusFadeForShellLaunch(INITIAL_WSL_FOCUS_FADE_SUPPRESSION_MS);
+  hasUsedInitialWslFocusFadeGuard = true;
+}
+
 export async function init(
   window: BrowserWindow,
   store: ConfigStore,
@@ -89,6 +101,7 @@ export function createTab(options: TabCreateOptions): TabSessionDTO {
   let status: TabStatus = 'pending';
 
   if (!deferred) {
+    guardInitialWslFocusFade(shellType);
     ptyProcess = terminalManager.spawnPty(
       shellType,
       80,
@@ -134,6 +147,7 @@ export function spawnTab(tabId: string, shellType?: Shell): TabSessionDTO {
   const shell = shellType ?? session.shellType;
   session.shellType = shell;
 
+  guardInitialWslFocusFade(shell);
   session.ptyProcess = terminalManager.spawnPty(
     shell,
     80,
@@ -280,4 +294,5 @@ export function _reset(): void {
   mainWindow = null;
   configStore = null;
   colorPaletteIndex = 0;
+  hasUsedInitialWslFocusFadeGuard = false;
 }

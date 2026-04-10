@@ -1,6 +1,7 @@
 import * as nodePty from 'node-pty';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execSync, spawnSync } from 'node:child_process';
 import log from 'electron-log/main';
 
 const logger = log.scope('terminal-manager');
@@ -17,6 +18,12 @@ const SHELL_EXECUTABLES: Record<AllowedShell, string> = {
   wsl: 'wsl.exe',
 };
 
+const WINDOWS_SYSTEM_SHELL_SEGMENTS: Partial<Record<AllowedShell, string[]>> = {
+  powershell: ['WindowsPowerShell', 'v1.0', 'powershell.exe'],
+  cmd: ['cmd.exe'],
+  wsl: ['wsl.exe'],
+};
+
 /** Display info for each known shell */
 const SHELL_INFO: Record<AllowedShell, { label: string; icon: string }> = {
   powershell: { label: 'Windows PowerShell', icon: '⚡' },
@@ -30,27 +37,6 @@ export interface AvailableShell {
   id: string;
   label: string;
   icon: string;
-}
-
-/** Detect which shells are available on this system */
-export function getAvailableShells(): AvailableShell[] {
-  const available: AvailableShell[] = [];
-  for (const shell of ALLOWED_SHELLS) {
-    const exe = SHELL_EXECUTABLES[shell];
-    try {
-      // Check if the executable is reachable via PATH or absolute path
-      const { execSync } = require('node:child_process');
-      execSync(`where ${exe}`, { stdio: 'ignore' });
-      available.push({
-        id: shell,
-        label: SHELL_INFO[shell].label,
-        icon: SHELL_INFO[shell].icon,
-      });
-    } catch {
-      // Not found in PATH — skip
-    }
-  }
-  return available;
 }
 
 let ptyProcess: nodePty.IPty | null = null;
@@ -76,6 +62,63 @@ function isAllowedShell(shell: string): shell is AllowedShell {
   return ALLOWED_SHELLS.includes(shell as AllowedShell);
 }
 
+function getWindowsSystemDirectory(
+  env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
+): string | null {
+  const systemRoot = env.SystemRoot ?? env.windir ?? env.WINDIR;
+  if (typeof systemRoot !== 'string' || systemRoot.trim() === '') {
+    return null;
+  }
+
+  const systemDirectoryName = process.arch === 'ia32' && typeof env.PROCESSOR_ARCHITEW6432 === 'string'
+    ? 'Sysnative'
+    : 'System32';
+
+  return path.win32.join(systemRoot.trim(), systemDirectoryName);
+}
+
+function resolveAllowlistedShellPath(shell: AllowedShell): string {
+  const systemShellSegments = WINDOWS_SYSTEM_SHELL_SEGMENTS[shell];
+  if (!systemShellSegments) {
+    return SHELL_EXECUTABLES[shell];
+  }
+
+  const systemDirectory = getWindowsSystemDirectory();
+  if (!systemDirectory) {
+    return SHELL_EXECUTABLES[shell];
+  }
+
+  // node-pty resolves relative commands against the parent process PATH
+  // before the child env override is applied, so inbox shells must be absolute.
+  return path.win32.join(systemDirectory, ...systemShellSegments);
+}
+
+/** Detect which shells are available on this system */
+export function getAvailableShells(): AvailableShell[] {
+  const available: AvailableShell[] = [];
+  for (const shell of ALLOWED_SHELLS) {
+    const exe = resolveAllowlistedShellPath(shell);
+    try {
+      if (path.win32.isAbsolute(exe)) {
+        if (!fs.existsSync(exe)) {
+          continue;
+        }
+      } else {
+        execSync(`where ${exe}`, { stdio: 'ignore' });
+      }
+
+      available.push({
+        id: shell,
+        label: SHELL_INFO[shell].label,
+        icon: SHELL_INFO[shell].icon,
+      });
+    } catch {
+      // Not found in PATH — skip
+    }
+  }
+  return available;
+}
+
 /** ANSI escape for dimmed text (#565f89) */
 const DIMMED = '\x1b[38;2;86;95;137m';
 const RESET = '\x1b[0m';
@@ -83,7 +126,7 @@ const RESET = '\x1b[0m';
 /** Resolve a shell alias or custom path to an executable path */
 export function resolveShellPath(shellConfig: string): string {
   if (isAllowedShell(shellConfig)) {
-    return SHELL_EXECUTABLES[shellConfig];
+    return resolveAllowlistedShellPath(shellConfig);
   }
   // Treat as custom absolute path
   return shellConfig;
@@ -180,8 +223,7 @@ let resolvedRegistryPath: string | null | undefined;
 
 function readWindowsRegistryValue(registryKey: string, valueName: string): string | null {
   try {
-    const { spawnSync: registrySpawnSync } = require('node:child_process');
-    const result = registrySpawnSync('reg', ['query', registryKey, '/v', valueName], {
+    const result = spawnSync('reg', ['query', registryKey, '/v', valueName], {
       stdio: ['ignore', 'pipe', 'ignore'],
       encoding: 'utf8',
       timeout: 5000,
@@ -193,7 +235,6 @@ function readWindowsRegistryValue(registryKey: string, valueName: string): strin
     }
     const match = result.stdout.match(/^\s+\S+\s+REG_(?:EXPAND_)?SZ\s+(.+?)$/m);
     const value = match ? match[1].trim() : null;
-    logger.info('[env-diag] reg query %s\\%s  → %s chars: %s', registryKey, valueName, value?.length ?? 0, value);
     return value;
   } catch (err) {
     logger.error('[env-diag] reg query threw for %s\\%s:', registryKey, valueName, err);
@@ -215,11 +256,9 @@ function getCleanWindowsPath(
   env: Record<string, string | undefined>,
 ): string | null {
   if (resolvedRegistryPath !== undefined) {
-    logger.info('[env-diag] getCleanWindowsPath cache hit  → %s', resolvedRegistryPath === null ? 'null (fallback)' : `${resolvedRegistryPath.length} chars`);
     return resolvedRegistryPath;
   }
 
-  logger.info('[env-diag] getCleanWindowsPath: reading registry…');
   const systemPath = readWindowsRegistryValue(SYSTEM_PATH_REGISTRY_KEY, 'Path');
   const userPath = readWindowsRegistryValue(USER_PATH_REGISTRY_KEY, 'Path');
 
@@ -234,7 +273,6 @@ function getCleanWindowsPath(
   if (userPath) parts.push(expandWindowsEnvVars(userPath, env));
 
   resolvedRegistryPath = parts.join(WINDOWS_PATH_DELIMITER);
-  logger.info('[env-diag] getCleanWindowsPath result (%d chars):\n%s', resolvedRegistryPath.length, resolvedRegistryPath);
   return resolvedRegistryPath;
 }
 
@@ -285,10 +323,8 @@ export function normalizeWindowsSpawnEnv(
 
   let pathSegments: string[];
   if (cleanPath) {
-    logger.info('[env-diag] normalizeWindowsSpawnEnv: using REGISTRY path (%d segments)', cleanPath.split(WINDOWS_PATH_DELIMITER).length);
     pathSegments = cleanPath.split(WINDOWS_PATH_DELIMITER);
   } else {
-    logger.info('[env-diag] normalizeWindowsSpawnEnv: using FALLBACK env-based path');
     pathSegments = Object.entries(env)
       .filter(([key, value]) => key.toLowerCase() === 'path' && typeof value === 'string')
       .sort(([leftKey], [rightKey]) => {
@@ -311,11 +347,6 @@ export function normalizeWindowsSpawnEnv(
   if (dedupedPathSegments.length > 0) {
     normalizedEnv.Path = dedupedPathSegments.join(WINDOWS_PATH_DELIMITER);
   }
-
-  logger.info('[env-diag] normalizeWindowsSpawnEnv final Path (%d segments):\n%s',
-    dedupedPathSegments.length,
-    dedupedPathSegments.map((s, i) => `  [${i}] ${s}`).join('\n'),
-  );
 
   const systemRoot = normalizedEnv.SystemRoot ?? env.SystemRoot ?? env.windir ?? env.WINDIR;
   if (typeof systemRoot === 'string' && systemRoot.trim() !== '') {
@@ -399,28 +430,36 @@ export function spawn(shell: string, cols?: number, rows?: number): void {
       env,
     });
 
+    const spawnedPty = ptyProcess;
+    const spawnedPid = spawnedPty.pid;
     const myGeneration = ++ptyGeneration;
 
     logger.info(
-      `Spawned shell → ${resolvedPath} (PID: ${ptyProcess.pid}, ${spawnCols}x${spawnRows})`,
+      `Spawned shell → ${resolvedPath} (PID: ${spawnedPid}, ${spawnCols}x${spawnRows})`,
     );
 
     // Wire persistent data callback to new instance, with bell detection
-    ptyProcess.onData((data: string) => {
+    spawnedPty.onData((data: string) => {
+      if (myGeneration !== ptyGeneration) {
+        return;
+      }
+
       if (bellCallback && data.includes('\x07')) {
         bellCallback();
       }
       dataCallback?.('default', data);
     });
 
-    ptyProcess.onExit(({ exitCode, signal }) => {
+    spawnedPty.onExit(({ exitCode, signal }) => {
+      const finalExitCode = exitCode ?? 0;
+      const finalSignal = signal ?? 0;
       logger.info(
-        `PTY exited (PID: ${ptyProcess?.pid}, exitCode: ${exitCode}, signal: ${signal})`,
+        `PTY exited (PID: ${spawnedPid}, exitCode: ${finalExitCode}, signal: ${finalSignal})`,
       );
       // Ignore exit from a PTY that was replaced by a newer spawn
       if (myGeneration !== ptyGeneration) return;
       ptyProcess = null;
-      exitCallback?.(exitCode, signal);
+      exitCallback?.(finalExitCode, finalSignal);
     });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
@@ -459,9 +498,6 @@ export function resize(cols: number, rows: number): void {
 /** Register a persistent data callback — automatically wired to new PTY instances */
 export function onData(callback: (tabId: string, data: string) => void): void {
   dataCallback = callback;
-  if (ptyProcess) {
-    ptyProcess.onData((data: string) => callback('default', data));
-  }
 }
 
 /** Register a persistent exit callback — fires on every PTY exit (including respawns) */
@@ -519,8 +555,10 @@ export function spawnPty(
   });
 
   pty.onExit(({ exitCode, signal }) => {
-    logger.info(`PTY exited (PID: ${pty.pid}, exitCode: ${exitCode}, signal: ${signal})`);
-    onExitCb(exitCode, signal);
+    const finalExitCode = exitCode ?? 0;
+    const finalSignal = signal ?? 0;
+    logger.info(`PTY exited (PID: ${pty.pid}, exitCode: ${finalExitCode}, signal: ${finalSignal})`);
+    onExitCb(finalExitCode, finalSignal);
   });
 
   return pty;
