@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import log from 'electron-log/main';
-import { APP_NAME } from '../shared/constants';
-import type { PendingUpdatePayload } from '../shared/ipc-types';
+import { APP_NAME } from '@shared/constants';
+import type { PendingUpdatePayload } from '@shared/ipc-types';
 import * as windowManager from './window-manager';
 
 const logger = log.scope('notification-manager');

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { CHANNELS } from '../shared/channels';
+import { CHANNELS } from '@shared/channels';
+import type { PendingUpdatePayload } from '@shared/ipc-types';
 
 contextBridge.exposeInMainWorld('quakeshell', {
   config: {
@@ -170,10 +171,10 @@ contextBridge.exposeInMainWorld('quakeshell', {
     getPendingUpdate: () => ipcRenderer.invoke(CHANNELS.APP_GET_PENDING_UPDATE),
     restartPendingUpdate: () => ipcRenderer.invoke(CHANNELS.APP_RESTART_PENDING_UPDATE),
     delayPendingUpdate: () => ipcRenderer.invoke(CHANNELS.APP_DELAY_PENDING_UPDATE),
-    onUpdateReady: (callback: (payload: { version: string; source: 'background-install' } | null) => void) => {
+    onUpdateReady: (callback: (payload: PendingUpdatePayload | null) => void) => {
       const listener = (
         _event: Electron.IpcRendererEvent,
-        payload: { version: string; source: 'background-install' } | null,
+        payload: PendingUpdatePayload | null,
       ) => callback(payload);
       ipcRenderer.on(CHANNELS.APP_UPDATE_READY, listener);
       return () => {
