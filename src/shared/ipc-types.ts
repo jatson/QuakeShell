@@ -75,6 +75,11 @@ export interface ContextMenuStatus {
   error?: string;
 }
 
+export interface PendingUpdatePayload {
+  version: string;
+  source: 'background-install';
+}
+
 export interface QuakeShellTerminalAPI {
   spawn(cols: number, rows: number): Promise<void>;
   resize(cols: number, rows: number): Promise<void>;
@@ -203,6 +208,10 @@ export interface QuakeShellWindowAPI {
 
 export interface QuakeShellAppAPI {
   checkWSL(): Promise<boolean>;
+  getPendingUpdate(): Promise<PendingUpdatePayload | null>;
+  restartPendingUpdate(): Promise<boolean>;
+  delayPendingUpdate(): Promise<PendingUpdatePayload | null>;
+  onUpdateReady(callback: (payload: PendingUpdatePayload | null) => void): () => void;
   registerContextMenu(): Promise<ContextMenuResult>;
   deregisterContextMenu(): Promise<ContextMenuResult>;
   getContextMenuStatus(): Promise<ContextMenuStatus>;

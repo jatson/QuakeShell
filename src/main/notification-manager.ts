@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import log from 'electron-log/main';
 import { APP_NAME } from '@shared/constants';
+import type { PendingUpdatePayload } from '@shared/ipc-types';
 import * as windowManager from './window-manager';
 
 const logger = log.scope('notification-manager');
@@ -22,6 +23,7 @@ let pendingUpdateVersion: string | null = null;
 let installingUpdateVersion: string | null = null;
 let updateInstallPromise: Promise<void> | null = null;
 let updateRestartHandler: (() => void) | null = null;
+const pendingUpdateListeners = new Set<(payload: PendingUpdatePayload | null) => void>();
 
 export interface NotificationOptions {
   title: string;
@@ -39,6 +41,50 @@ export interface UpdateCheckResult {
 
 export function setUpdateRestartHandler(handler: (() => void) | null): void {
   updateRestartHandler = handler;
+}
+
+function buildPendingUpdatePayload(version: string): PendingUpdatePayload {
+  return {
+    version,
+    source: 'background-install',
+  };
+}
+
+function emitPendingUpdateChanged(): void {
+  const payload = getPendingUpdate();
+  for (const listener of pendingUpdateListeners) {
+    try {
+      listener(payload);
+    } catch (error) {
+      updateLogger.warn(`Pending update listener failed: ${getErrorMessage(error)}`);
+    }
+  }
+}
+
+function setPendingUpdateVersion(version: string | null): void {
+  if (pendingUpdateVersion === version) {
+    return;
+  }
+
+  pendingUpdateVersion = version;
+  emitPendingUpdateChanged();
+}
+
+export function getPendingUpdate(): PendingUpdatePayload | null {
+  return pendingUpdateVersion ? buildPendingUpdatePayload(pendingUpdateVersion) : null;
+}
+
+export function onPendingUpdateChange(
+  listener: (payload: PendingUpdatePayload | null) => void,
+): () => void {
+  pendingUpdateListeners.add(listener);
+  return () => {
+    pendingUpdateListeners.delete(listener);
+  };
+}
+
+export function delayPendingUpdate(): PendingUpdatePayload | null {
+  return getPendingUpdate();
 }
 
 function getInstallRoot(environment = process.env): string {
@@ -188,67 +234,66 @@ function launchDetachedExecutable(executablePath: string): Promise<void> {
   });
 }
 
-function notifyUpdateReady(version: string): void {
-  send({
-    title: APP_NAME,
-    body: `${APP_NAME} v${version} installed. Click to restart.`,
-    onClick: () => {
-      void restartIntoInstalledVersion(version);
-    },
-    bypassSuppression: true,
-  });
-}
-
-async function restartIntoInstalledVersion(version: string): Promise<void> {
+async function restartIntoInstalledVersion(version: string): Promise<boolean> {
   const executablePath = getInstalledExecutable(version);
 
   if (!executablePath) {
     void shell.openExternal(getReleasePageUrl(version));
-    return;
+    return false;
   }
 
   try {
     await launchDetachedExecutable(executablePath);
+    setPendingUpdateVersion(null);
     if (updateRestartHandler) {
       updateRestartHandler();
     } else {
       app.quit();
     }
+    return true;
   } catch (error) {
     const message = getErrorMessage(error);
     updateLogger.warn(`Failed to relaunch ${APP_NAME} ${version}: ${message}`);
     void shell.openExternal(getReleasePageUrl(version));
+    return false;
   }
+}
+
+export async function restartPendingUpdate(): Promise<boolean> {
+  if (!pendingUpdateVersion) {
+    return false;
+  }
+
+  return restartIntoInstalledVersion(pendingUpdateVersion);
 }
 
 async function installAvailableUpdate(latestVersion: string): Promise<void> {
   const validatedVersion = validateRegistryVersion(latestVersion);
 
   if (pendingUpdateVersion === validatedVersion) {
-    notifyUpdateReady(validatedVersion);
     return;
   }
 
-  if (updateInstallPromise && installingUpdateVersion === validatedVersion) {
+  if (updateInstallPromise) {
+    if (installingUpdateVersion && installingUpdateVersion !== validatedVersion) {
+      updateLogger.info(
+        `Update install already running for ${installingUpdateVersion}; deferring ${validatedVersion}`,
+      );
+    }
+
     return updateInstallPromise;
   }
 
   installingUpdateVersion = validatedVersion;
-  send({
-    title: APP_NAME,
-    body: `Installing ${APP_NAME} v${validatedVersion}...`,
-    onClick: () => undefined,
-    bypassSuppression: true,
-  });
-
   updateInstallPromise = runNpmInstall(validatedVersion)
     .then(() => {
-      pendingUpdateVersion = validatedVersion;
+      setPendingUpdateVersion(validatedVersion);
       updateLogger.info(`Update installed: ${validatedVersion}`);
-      notifyUpdateReady(validatedVersion);
     })
     .catch((error) => {
-      pendingUpdateVersion = null;
+      if (pendingUpdateVersion === validatedVersion) {
+        setPendingUpdateVersion(null);
+      }
       const message = getErrorMessage(error);
       updateLogger.warn(`Automatic update failed: ${message}`);
       send({
@@ -353,16 +398,9 @@ export async function checkForUpdates(manual = false): Promise<UpdateCheckResult
 
     if (updateAvailable) {
       if (pendingUpdateVersion === latestVersion) {
-        notifyUpdateReady(latestVersion);
+        updateLogger.info(`Update already installed and waiting for restart: ${latestVersion}`);
       } else if (canAutoInstallUpdate()) {
-        send({
-          title: APP_NAME,
-          body: `${APP_NAME} v${latestVersion} available. Click to install.`,
-          onClick: () => {
-            void installAvailableUpdate(latestVersion);
-          },
-          bypassSuppression: true,
-        });
+        void installAvailableUpdate(latestVersion);
       } else {
         send({
           title: APP_NAME,
@@ -391,4 +429,12 @@ export async function checkForUpdates(manual = false): Promise<UpdateCheckResult
     updateLogger.verbose(`Update check failed: ${message}`);
     return { updateAvailable: false, currentVersion, latestVersion: null, error: message };
   }
+}
+
+export function _reset(): void {
+  pendingUpdateVersion = null;
+  installingUpdateVersion = null;
+  updateInstallPromise = null;
+  updateRestartHandler = null;
+  pendingUpdateListeners.clear();
 }

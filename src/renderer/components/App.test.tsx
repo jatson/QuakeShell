@@ -29,6 +29,10 @@ vi.mock('./Onboarding/OnboardingOverlay', () => ({
   default: () => null,
 }));
 
+vi.mock('./UpdateRestartPrompt', () => ({
+  default: () => null,
+}));
+
 vi.mock('./SettingsPanel', () => ({
   default: () => null,
 }));

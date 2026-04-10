@@ -11,6 +11,9 @@ const mockGetAllWindows = vi.fn(() => [
 
 // Track terminal-manager callbacks
 let capturedOnExitCallback: ((exitCode: number, signal: number) => void) | null = null;
+let capturedPendingUpdateChangeCallback:
+  | ((payload: { version: string; source: 'background-install' } | null) => void)
+  | null = null;
 
 const { mockElectronApp } = vi.hoisted(() => ({
   mockElectronApp: {
@@ -86,6 +89,13 @@ vi.mock('./app-lifecycle', () => ({
 
 vi.mock('./notification-manager', () => ({
   send: vi.fn(),
+  getPendingUpdate: vi.fn(() => null),
+  restartPendingUpdate: vi.fn(() => Promise.resolve(false)),
+  delayPendingUpdate: vi.fn(() => null),
+  onPendingUpdateChange: vi.fn((callback: (payload: { version: string; source: 'background-install' } | null) => void) => {
+    capturedPendingUpdateChangeCallback = callback;
+    return vi.fn();
+  }),
 }));
 
 vi.mock('./context-menu-installer', () => ({
@@ -113,7 +123,7 @@ vi.mock('./theme-engine', () => ({
   },
 }));
 
-import { CHANNELS } from '@shared/channels';
+import { CHANNELS } from '../shared/channels';
 import { registerIpcHandlers } from './ipc-handlers';
 import type { ConfigStore } from './config-store';
 import * as windowManager from './window-manager';
@@ -125,7 +135,12 @@ import * as contextMenuInstaller from './context-menu-installer';
 
 describe('main/ipc-handlers', () => {
   const mockMainWindow = {
-    webContents: { send: mockWebContentsSend },
+    isDestroyed: vi.fn(() => false),
+    once: vi.fn(),
+    webContents: {
+      send: mockWebContentsSend,
+      isDestroyed: vi.fn(() => false),
+    },
   } as unknown as Electron.BrowserWindow;
 
   const mockConfigStore = {
@@ -143,9 +158,58 @@ describe('main/ipc-handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capturedOnExitCallback = null;
+    capturedPendingUpdateChangeCallback = null;
     mockElectronApp.isPackaged = false;
     Object.keys(ipcMainHandlers).forEach((key) => delete ipcMainHandlers[key]);
     registerIpcHandlers(mockConfigStore as unknown as ConfigStore, mockMainWindow);
+  });
+
+  describe('pending update IPC', () => {
+    it('returns the current pending update payload', async () => {
+      vi.mocked(notificationManager.getPendingUpdate).mockReturnValueOnce({
+        version: '2.0.0',
+        source: 'background-install',
+      });
+
+      await expect(ipcMainHandlers[CHANNELS.APP_GET_PENDING_UPDATE]({})).resolves.toEqual({
+        version: '2.0.0',
+        source: 'background-install',
+      });
+    });
+
+    it('forwards restartPendingUpdate requests to notification-manager', async () => {
+      vi.mocked(notificationManager.restartPendingUpdate).mockResolvedValueOnce(true);
+
+      await expect(ipcMainHandlers[CHANNELS.APP_RESTART_PENDING_UPDATE]({})).resolves.toBe(true);
+      expect(notificationManager.restartPendingUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it('forwards delayPendingUpdate requests to notification-manager', async () => {
+      vi.mocked(notificationManager.delayPendingUpdate).mockReturnValueOnce({
+        version: '2.0.0',
+        source: 'background-install',
+      });
+
+      await expect(ipcMainHandlers[CHANNELS.APP_DELAY_PENDING_UPDATE]({})).resolves.toEqual({
+        version: '2.0.0',
+        source: 'background-install',
+      });
+      expect(notificationManager.delayPendingUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it('broadcasts pending update changes to the renderer', () => {
+      expect(capturedPendingUpdateChangeCallback).not.toBeNull();
+
+      capturedPendingUpdateChangeCallback!({
+        version: '2.0.0',
+        source: 'background-install',
+      });
+
+      expect(mockWebContentsSend).toHaveBeenCalledWith(CHANNELS.APP_UPDATE_READY, {
+        version: '2.0.0',
+        source: 'background-install',
+      });
+    });
   });
 
   describe('tab:input handler', () => {

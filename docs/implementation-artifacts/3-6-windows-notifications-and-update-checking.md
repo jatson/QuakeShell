@@ -123,6 +123,13 @@ Periodic timer (every 24h) OR manual menu click
         → Return { updateAvailable: false, error: message }
 ```
 
+### Update Flow Amendment (2026-04-10)
+
+- Supported npm-managed installs now begin downloading and installing validated updates silently in the background as soon as a newer version is detected.
+- Successful background installs no longer rely on an immediate Windows toast to force the decision. Instead, QuakeShell keeps a pending-restart state and shows an in-app Restart now or Later prompt the next time the dropdown is opened after being hidden.
+- Choosing Later preserves the active terminal session and keeps the restart pending so the same prompt can reappear on a later dropdown open.
+- Unsupported distributions and failed installs still fall back to the existing download or failure notification behavior.
+
 ### Electron APIs
 
 | API | Usage |
