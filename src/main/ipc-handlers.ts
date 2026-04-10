@@ -2,8 +2,8 @@ import { ipcMain, BrowserWindow, shell, screen, app } from 'electron';
 import { execSync } from 'node:child_process';
 import os from 'node:os';
 import log from 'electron-log/main';
-import { CHANNELS } from '@shared/channels';
-import type { TerminalProcessExitPayload } from '@shared/ipc-types';
+import { CHANNELS } from '../shared/channels';
+import type { TerminalProcessExitPayload } from '../shared/ipc-types';
 import { type ConfigStore } from './config-store';
 import * as terminalManager from './terminal-manager';
 import * as tabManager from './tab-manager';
@@ -620,6 +620,34 @@ export function registerIpcHandlers(
     } catch {
       return false;
     }
+  });
+
+  ipcMain.handle(CHANNELS.APP_GET_PENDING_UPDATE, async () => {
+    return notificationManager.getPendingUpdate();
+  });
+
+  ipcMain.handle(CHANNELS.APP_RESTART_PENDING_UPDATE, async () => {
+    return notificationManager.restartPendingUpdate();
+  });
+
+  ipcMain.handle(CHANNELS.APP_DELAY_PENDING_UPDATE, async () => {
+    return notificationManager.delayPendingUpdate();
+  });
+
+  const unsubscribePendingUpdate = notificationManager.onPendingUpdateChange((payload) => {
+    try {
+      if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) {
+        return;
+      }
+
+      mainWindow.webContents.send(CHANNELS.APP_UPDATE_READY, payload);
+    } catch (error) {
+      logger.warn('app:update-ready broadcast failed:', error);
+    }
+  });
+
+  mainWindow.once('closed', () => {
+    unsubscribePendingUpdate();
   });
 
   // Wire config hot-reload: broadcast changes to all renderer windows

@@ -52,6 +52,10 @@ describe('shared/channels', () => {
   it('contains placeholder app channels', () => {
     expect(CHANNELS.APP_QUIT).toBe('app:quit');
     expect(CHANNELS.APP_GET_VERSION).toBe('app:get-version');
+    expect(CHANNELS.APP_GET_PENDING_UPDATE).toBe('app:get-pending-update');
+    expect(CHANNELS.APP_UPDATE_READY).toBe('app:update-ready');
+    expect(CHANNELS.APP_RESTART_PENDING_UPDATE).toBe('app:restart-pending-update');
+    expect(CHANNELS.APP_DELAY_PENDING_UPDATE).toBe('app:delay-pending-update');
   });
 
   it('all channel values follow domain:action convention', () => {

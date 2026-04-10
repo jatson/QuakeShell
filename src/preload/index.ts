@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { CHANNELS } from '@shared/channels';
+import { CHANNELS } from '../shared/channels';
 
 contextBridge.exposeInMainWorld('quakeshell', {
   config: {
@@ -167,6 +167,19 @@ contextBridge.exposeInMainWorld('quakeshell', {
   },
   app: {
     checkWSL: () => ipcRenderer.invoke(CHANNELS.APP_CHECK_WSL),
+    getPendingUpdate: () => ipcRenderer.invoke(CHANNELS.APP_GET_PENDING_UPDATE),
+    restartPendingUpdate: () => ipcRenderer.invoke(CHANNELS.APP_RESTART_PENDING_UPDATE),
+    delayPendingUpdate: () => ipcRenderer.invoke(CHANNELS.APP_DELAY_PENDING_UPDATE),
+    onUpdateReady: (callback: (payload: { version: string; source: 'background-install' } | null) => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        payload: { version: string; source: 'background-install' } | null,
+      ) => callback(payload);
+      ipcRenderer.on(CHANNELS.APP_UPDATE_READY, listener);
+      return () => {
+        ipcRenderer.removeListener(CHANNELS.APP_UPDATE_READY, listener);
+      };
+    },
     registerContextMenu: () => ipcRenderer.invoke(CHANNELS.APP_REGISTER_CONTEXT_MENU),
     deregisterContextMenu: () => ipcRenderer.invoke(CHANNELS.APP_DEREGISTER_CONTEXT_MENU),
     getContextMenuStatus: () => ipcRenderer.invoke(CHANNELS.APP_CONTEXT_MENU_STATUS),

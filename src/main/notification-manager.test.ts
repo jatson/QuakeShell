@@ -64,7 +64,10 @@ import {
   send,
   isNotificationSuppressed,
   checkForUpdates,
+  getPendingUpdate,
+  restartPendingUpdate,
   setUpdateRestartHandler,
+  _reset,
 } from './notification-manager';
 
 function createMockChildProcess() {
@@ -97,6 +100,7 @@ const temporaryPaths: string[] = [];
 
 describe('main/notification-manager', () => {
   beforeEach(() => {
+    _reset();
     MockNotification.mockClear();
     mockAppQuit.mockClear();
     mockShellOpenExternal.mockClear();
@@ -120,6 +124,7 @@ describe('main/notification-manager', () => {
   });
 
   afterEach(() => {
+    _reset();
     process.execPath = originalExecPath;
     vi.unstubAllEnvs();
     setUpdateRestartHandler(null);
@@ -176,7 +181,7 @@ describe('main/notification-manager', () => {
       const inst = getLastInstance();
       const clickHandler = inst.on.mock.calls.find(
         (call: unknown[]) => call[0] === 'click',
-      )![1] as Function;
+      )![1] as () => void;
 
       clickHandler();
       expect(onClick).toHaveBeenCalled();
@@ -188,7 +193,7 @@ describe('main/notification-manager', () => {
       const inst = getLastInstance();
       const clickHandler = inst.on.mock.calls.find(
         (call: unknown[]) => call[0] === 'click',
-      )![1] as Function;
+      )![1] as () => void;
 
       clickHandler();
       expect(windowManager.toggle).toHaveBeenCalled();
@@ -272,7 +277,7 @@ describe('main/notification-manager', () => {
       const notification = MockNotification.mock.instances[MockNotification.mock.instances.length - 1] as any;
       const clickHandler = notification.on.mock.calls.find(
         (call: unknown[]) => call[0] === 'click',
-      )![1] as Function;
+      )![1] as () => void;
 
       clickHandler();
 
@@ -280,7 +285,7 @@ describe('main/notification-manager', () => {
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('installs updates on notification click for npm-managed builds and restarts into the new executable', async () => {
+    it('starts a silent background install for npm-managed builds and restarts into the new executable when requested later', async () => {
       const installRoot = createTempDirectory();
       temporaryPaths.push(installRoot);
       vi.stubEnv('QUAKESHELL_INSTALL_ROOT', installRoot);
@@ -308,13 +313,6 @@ describe('main/notification-manager', () => {
 
       await checkForUpdates(false);
 
-      const availableNotification = MockNotification.mock.instances[MockNotification.mock.instances.length - 1] as any;
-      const availableClick = availableNotification.on.mock.calls.find(
-        (call: unknown[]) => call[0] === 'click',
-      )![1] as Function;
-
-      availableClick();
-
       expect(mockSpawn).toHaveBeenNthCalledWith(
         1,
         'npm.cmd',
@@ -324,6 +322,7 @@ describe('main/notification-manager', () => {
           windowsHide: true,
         }),
       );
+      expect(MockNotification).not.toHaveBeenCalled();
 
       const updatedExecutablePath = path.join(
         installRoot,
@@ -338,18 +337,13 @@ describe('main/notification-manager', () => {
       installChild.emit('exit', 0);
 
       await vi.waitFor(() => {
-        expect(MockNotification).toHaveBeenCalledWith({
-          title: 'QuakeShell',
-          body: 'QuakeShell v2.0.0 installed. Click to restart.',
+        expect(getPendingUpdate()).toEqual({
+          version: '2.0.0',
+          source: 'background-install',
         });
       });
 
-      const restartNotification = MockNotification.mock.instances[MockNotification.mock.instances.length - 1] as any;
-      const restartClick = restartNotification.on.mock.calls.find(
-        (call: unknown[]) => call[0] === 'click',
-      )![1] as Function;
-
-      restartClick();
+      const restartPromise = restartPendingUpdate();
 
       expect(mockSpawn).toHaveBeenNthCalledWith(
         2,
@@ -364,9 +358,17 @@ describe('main/notification-manager', () => {
 
       restartChild.emit('spawn');
 
+      await expect(restartPromise).resolves.toBe(true);
+
       await vi.waitFor(() => {
         expect(restartHandler).toHaveBeenCalled();
       });
+      expect(getPendingUpdate()).toBeNull();
+    });
+
+    it('returns false when restartPendingUpdate is called without a pending update', async () => {
+      await expect(restartPendingUpdate()).resolves.toBe(false);
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
     it('rejects invalid registry versions before notifying or spawning npm', async () => {

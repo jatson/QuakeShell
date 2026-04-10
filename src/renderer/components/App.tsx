@@ -5,6 +5,7 @@ import { initThemeStore } from '../state/theme-store';
 import { TerminalView } from './Terminal/TerminalView';
 import { ShellPicker } from './ShellPicker/ShellPicker';
 import OnboardingOverlay from './Onboarding/OnboardingOverlay';
+import UpdateRestartPrompt from './UpdateRestartPrompt';
 import ResizeHandle from './ResizeHandle/ResizeHandle';
 import SplitPane from './SplitPane';
 // eslint-disable-next-line import/no-unresolved
@@ -836,6 +837,7 @@ export function App() {
       </div>
       <SettingsPanel />
       <ResizeHandle opacity={currentOpacity} />
+      <UpdateRestartPrompt />
       <OnboardingOverlay />
     </div>
   );
